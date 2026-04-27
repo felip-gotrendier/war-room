@@ -1,0 +1,3 @@
+[submodule "atlas-docs"]
+	path = atlas-docs
+	url = git@github.com:gotrendier/atlas-docs.git
