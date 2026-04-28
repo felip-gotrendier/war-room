@@ -4,7 +4,7 @@ import json
 import os
 
 from mcp import ClientSession
-from mcp.client.streamablehttp import streamablehttp_client
+from mcp.client.streamable_http import streamablehttp_client
 
 from war_room.models import Coverage, WarRoomFinding
 

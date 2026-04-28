@@ -8,7 +8,6 @@ from typing import Any
 
 import anthropic
 
-from war_room import clients
 from war_room import knowledge_loader
 from war_room.models import ConversationContext, IterationCapReached
 from war_room.skills import (

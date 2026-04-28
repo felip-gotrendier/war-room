@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timezone
 
 from mcp import ClientSession
-from mcp.client.streamablehttp import streamablehttp_client
+from mcp.client.streamable_http import streamablehttp_client
 
 from war_room.models import Coverage, WarRoomFinding
 
