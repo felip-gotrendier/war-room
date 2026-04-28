@@ -34,32 +34,7 @@ Retrieves a metric's time series for a given time window.
 | `window` | object | yes | `{ start: ISO8601 date, end: ISO8601 date }` |
 | `platform` | string | no | Platform filter, e.g. `mx_android`. If absent, returns all platforms (see multi-platform response below). |
 
-**Response when `platform` is specified** (single platform):
-
-```json
-{
-  "data": {
-    "metric": "users_product_list/active",
-    "platform": "mx_android",
-    "series": [
-      { "date": "2026-04-20", "value": 0.923 },
-      { "date": "2026-04-21", "value": 0.897 }
-    ]
-  },
-  "coverage": {
-    "requested": { "name": "users_product_list/active", "window": { "start": "2026-04-14", "end": "2026-04-27" }, "platform": "mx_android" },
-    "covered":   { "name": "users_product_list/active", "window": { "start": "2026-04-14", "end": "2026-04-26" }, "platform": "mx_android" },
-    "is_complete": false,
-    "gaps": ["2026-04-27 data not yet computed"],
-    "freshness_at": "2026-04-27T08:00:00Z"
-  }
-}
-```
-
-`value` is a ratio in [0.0, 1.0] representing the funnel stage conversion for
-that date. It is not a raw user count.
-
-**Response when `platform` is absent** (all platforms):
+**Response** (uniform format — `platforms` is always an array):
 
 ```json
 {
@@ -106,8 +81,16 @@ that date. It is not a raw user count.
 }
 ```
 
-When `platform` is absent: `data` contains a `platforms` array (not a single
-`platform` field). The `coverage` object does not include a `platform` key.
+`data.platforms` is always an array. When `platform` is specified in the
+request, the array contains exactly one entry for that platform. When
+`platform` is absent, the array contains one entry per available platform.
+war-room always iterates over `platforms` — it never branches on response shape.
+
+`value` is a ratio in [0.0, 1.0] representing the funnel stage conversion for
+that date. It is not a raw user count.
+
+When `platform` is specified, `coverage.requested` includes the `platform`
+key; when absent, it does not.
 
 `data` and `error` are mutually exclusive. `coverage` is always present.
 
