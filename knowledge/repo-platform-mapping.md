@@ -7,25 +7,32 @@ This file maps GoTrendier repositories to the platforms they affect. The
 coincidental when the metric drop is platform-specific and the release is in
 an unrelated repository.
 
-This mapping is based on ADR-001 design assumptions. Validate against actual
-release-agent repository list and engineering team knowledge in Phase 2.
+This mapping is based on ADR-001 design assumptions and the release-agent
+context as of Phase 1a. Validate against the actual release-agent repository
+list in Phase 2.
 
-## Mapping
+## Tracked repositories
 
-| Repository | Platforms affected | Notes |
-|------------|-------------------|-------|
-| `android` | mx_android, co_android | Mobile Android app for both markets |
-| `ios` | mx_ios, co_ios | Mobile iOS app for both markets |
-| `backend` | mx_android, mx_ios, co_android, co_ios, web | API layer serving all platforms |
-| `notisfier` | mx_android, mx_ios, co_android, co_ios | Push notification service; affects engagement metrics, not funnel conversion |
-| `web` | web | Web storefront |
+The following repositories are tracked by release-agent for GoTrendier
+production. `trendify-test-project` is release-agent's sandbox environment
+and is not a GoTrendier production service — war-room does not query it.
+
+| Repository | Platforms affected | Integration status | Notes |
+|------------|-------------------|--------------------|-------|
+| `android` | mx_android, co_android | Active | Mobile Android app for both markets |
+| `backend` | mx_android, mx_ios, co_android, co_ios | Pending production integration | API layer serving all mobile platforms |
+| `notisfier` | mx_android, mx_ios, co_android, co_ios | Pending production integration | Push notification service; affects engagement metrics, not funnel conversion |
+
+Note: `ios` and `web` repositories are not tracked by release-agent as of
+Phase 1a. Do not include iOS or web releases in correlation findings until
+confirmed tracked.
 
 ## Using this mapping
 
-A release in `android` is coincidental for a drop observed only on `mx_ios`
-or `web`. A release in `backend` is relevant for any platform-specific or
-cross-platform drop. A release in `notisfier` is coincidental for funnel
-conversion drops (it affects notification delivery, not checkout).
+A release in `android` is coincidental for a drop observed only on `mx_ios`.
+A release in `backend` is relevant for any cross-platform or mobile drop.
+A release in `notisfier` is coincidental for funnel conversion drops (it
+affects notification delivery, not checkout).
 
 When the repository list from release-agent contains repositories not listed
 here: treat them as unknown scope and note this explicitly in the correlation
