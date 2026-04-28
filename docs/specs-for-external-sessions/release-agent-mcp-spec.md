@@ -148,11 +148,12 @@ a metric regression.
 }
 ```
 
-**`summary` field**: a human-readable narrative of what changed. war-room
-reads this field and reasons about whether the changes described could
-plausibly affect a given funnel metric. It is not parsed programmatically —
-write it for an LLM reader. More detail is better than less. Include the
-functional areas changed, not just file names.
+**`summary` field**: narrative description of what changed (language of the
+deployment — typically Spanish for GoTrendier). war-room reads this field
+and reasons about whether the changes described could plausibly affect a
+given funnel metric. It is not parsed programmatically — write it for an
+LLM reader. More detail is better than less. Include the functional areas
+changed, not just file names.
 
 **`areas_affected` field**: optional list of funnel stage names
 (`product_list`, `product_view`, `checkout`, `purchase`) that the release
