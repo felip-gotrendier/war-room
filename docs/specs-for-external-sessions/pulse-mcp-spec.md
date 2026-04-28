@@ -32,9 +32,9 @@ Retrieves a metric's time series for a given time window.
 |------|------|----------|-------------|
 | `name` | string | yes | Metric identifier, e.g. `users_product_list/active` |
 | `window` | object | yes | `{ start: ISO8601 date, end: ISO8601 date }` |
-| `platform` | string | no | Platform filter, e.g. `mx_android`. If absent, returns all platforms. |
+| `platform` | string | no | Platform filter, e.g. `mx_android`. If absent, returns all platforms (see multi-platform response below). |
 
-**Response** (WarRoomResponse envelope):
+**Response when `platform` is specified** (single platform):
 
 ```json
 {
@@ -42,8 +42,8 @@ Retrieves a metric's time series for a given time window.
     "metric": "users_product_list/active",
     "platform": "mx_android",
     "series": [
-      { "date": "2026-04-20", "value": 42300 },
-      { "date": "2026-04-21", "value": 41800 }
+      { "date": "2026-04-20", "value": 0.923 },
+      { "date": "2026-04-21", "value": 0.897 }
     ]
   },
   "coverage": {
@@ -55,6 +55,59 @@ Retrieves a metric's time series for a given time window.
   }
 }
 ```
+
+`value` is a ratio in [0.0, 1.0] representing the funnel stage conversion for
+that date. It is not a raw user count.
+
+**Response when `platform` is absent** (all platforms):
+
+```json
+{
+  "data": {
+    "metric": "users_product_list/active",
+    "platforms": [
+      {
+        "platform": "mx_android",
+        "series": [
+          { "date": "2026-04-20", "value": 0.923 },
+          { "date": "2026-04-21", "value": 0.897 }
+        ]
+      },
+      {
+        "platform": "mx_ios",
+        "series": [
+          { "date": "2026-04-20", "value": 0.941 },
+          { "date": "2026-04-21", "value": 0.938 }
+        ]
+      },
+      {
+        "platform": "co_android",
+        "series": [
+          { "date": "2026-04-20", "value": 0.887 },
+          { "date": "2026-04-21", "value": 0.881 }
+        ]
+      },
+      {
+        "platform": "co_ios",
+        "series": [
+          { "date": "2026-04-20", "value": 0.902 },
+          { "date": "2026-04-21", "value": 0.899 }
+        ]
+      }
+    ]
+  },
+  "coverage": {
+    "requested": { "name": "users_product_list/active", "window": { "start": "2026-04-14", "end": "2026-04-27" } },
+    "covered":   { "name": "users_product_list/active", "window": { "start": "2026-04-14", "end": "2026-04-26" } },
+    "is_complete": false,
+    "gaps": ["2026-04-27 data not yet computed"],
+    "freshness_at": "2026-04-27T08:00:00Z"
+  }
+}
+```
+
+When `platform` is absent: `data` contains a `platforms` array (not a single
+`platform` field). The `coverage` object does not include a `platform` key.
 
 `data` and `error` are mutually exclusive. `coverage` is always present.
 
@@ -110,15 +163,19 @@ If no anomalies are detected: `"anomalies": []`. This is not an error.
 
 ### `trigger_scan`
 
-Requests a fresh computation of a metric. Used when `check_metric` returns
-stale data (freshness_at is too old relative to the requested window).
+Requests a fresh computation of a metric for the latest available analysis
+date. Used when `check_metric` returns stale data (freshness_at is too old
+relative to the requested window).
 
 **Parameters**:
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `name` | string | yes | Metric identifier |
-| `window` | object | yes | `{ start: ISO8601 date, end: ISO8601 date }` |
+
+`trigger_scan` operates on the latest available analysis date in pulse's data
+pipeline — it does not accept a window parameter. The analysis date covered
+by the resulting scan is reflected in `coverage.covered` of the response.
 
 **Response**:
 
@@ -130,7 +187,7 @@ stale data (freshness_at is too old relative to the requested window).
     "estimated_completion": "2026-04-27T09:15:00Z"
   },
   "coverage": {
-    "requested": { "name": "users_checkout/active", "window": { "start": "2026-04-14", "end": "2026-04-27" } },
+    "requested": { "name": "users_checkout/active" },
     "covered":   {},
     "is_complete": false,
     "gaps": ["scan in progress — data not yet available"],
@@ -140,8 +197,8 @@ stale data (freshness_at is too old relative to the requested window).
 ```
 
 `trigger_scan` is asynchronous. war-room does not poll for completion within
-the same investigation session. It notes the scan has been triggered and
-informs the PM that data will be available in a future session.
+the same investigation conversation. It notes the scan has been triggered and
+informs the PM that data will be available in a future conversation.
 
 ---
 
