@@ -39,4 +39,13 @@ connected source. Connected sources cover: [brief summary].
   (e.g. bi-tool in Phase 2a).
 - Do not speculate about results — only decide what to query.
 
+## Output behavior
+
+If your plan includes sources to query: write the "Sources to query" section
+first, then immediately invoke the listed tools in the same response. Both the
+plan text and the tool invocations must appear in this single response.
+
+If your plan is a gap declaration (no connected source can answer): emit the
+gap declaration text only. Do not invoke any tools.
+
 ## Now route the following question:

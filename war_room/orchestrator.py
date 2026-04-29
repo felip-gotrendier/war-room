@@ -162,16 +162,34 @@ async def _run_loop(context: ConversationContext) -> str:
             await _maybe_inject_hypothesis(context, text)
             return text
 
-        # Execute all tool calls and inject results
-        tool_results = []
+        # Execute all tool calls and collect results
+        tool_results_content: list[dict] = []
         for block in tool_uses:
             result = await _dispatch_tool(block.name, block.input)
-            tool_results.append({
+            tool_results_content.append({
                 "type": "tool_result",
                 "tool_use_id": block.id,
                 "content": json.dumps(result),
             })
-        context.messages.append({"role": "user", "content": tool_results})
+
+        # Inject skill prompts as text blocks in the same user message.
+        # trigger_scan is excluded from pulse_ran: it is fire-and-forget with
+        # no analyzable data — injecting funnel-investigation would be premature.
+        pulse_ran = any(b.name in {"check_metric", "get_recent_anomalies"} for b in tool_uses)
+        release_ran = any(b.name in {"get_releases", "get_release", "explain_release"} for b in tool_uses)
+
+        if pulse_ran:
+            tool_results_content.append({
+                "type": "text",
+                "text": funnel_investigation.build_message()["content"],
+            })
+        if release_ran:
+            tool_results_content.append({
+                "type": "text",
+                "text": release_metric_correlation.build_message()["content"],
+            })
+
+        context.messages.append({"role": "user", "content": tool_results_content})
 
 
 async def _maybe_inject_hypothesis(context: ConversationContext, last_text: str) -> None:
