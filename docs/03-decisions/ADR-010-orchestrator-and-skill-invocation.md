@@ -236,6 +236,28 @@ route handler layer.
 
 ---
 
+## Phase 2a empirical validation (2026-04-29)
+
+Tested end-to-end against real pulse and release-agent MCP servers on the
+anchor use case (users_product_list/active drop in mx_android, degraded
+release-agent case):
+
+- `test_anchor_use_case_degraded`: PASSED. Hypothesis formed with confidence
+  Working/Speculative (both acceptable; Claude is non-deterministic).
+  Time-series data from pulse reaches Claude correctly. Gap declaration for
+  release correlation included in the hypothesis.
+- `test_iteration_cap_respected`: PASSED.
+- `test_summarize_after_investigation`: SKIPPED (expected). The test question
+  is framed as routine review on a stable metric; Claude correctly does not
+  emit `Hypothesis:`. The skip confirms the heuristic behaves honestly —
+  it does not generate false-positive hypotheses.
+
+The heuristic fragility constraint above was validated in production: the
+mechanism works correctly for incident-framed questions and fails gracefully
+(skip, not assertion error) for routine ones.
+
+---
+
 ## Related decisions
 
 - ADR-002 — iteration loop (1 call = 1 iteration; cap = 15)

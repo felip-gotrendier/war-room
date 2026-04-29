@@ -30,8 +30,8 @@ Retrieves a metric's time series for a given time window.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `name` | string | yes | Metric identifier, e.g. `users_product_list/active` |
-| `window` | object | yes | `{ start: ISO8601 date, end: ISO8601 date }` |
+| `metric_name` | string | yes | Metric identifier, e.g. `users_product_list/active` |
+| `days` | integer | yes | Number of days to look back from today, e.g. `14` |
 | `platform` | string | no | Platform filter, e.g. `mx_android`. If absent, returns all platforms (see multi-platform response below). |
 
 **Response** (uniform format — `platforms` is always an array):
@@ -72,10 +72,10 @@ Retrieves a metric's time series for a given time window.
     ]
   },
   "coverage": {
-    "requested": { "name": "users_product_list/active", "window": { "start": "2026-04-14", "end": "2026-04-27" } },
-    "covered":   { "name": "users_product_list/active", "window": { "start": "2026-04-14", "end": "2026-04-26" } },
+    "requested": { "metric_name": "users_product_list/active", "days": 14 },
+    "covered":   { "metric_name": "users_product_list/active", "days": 13 },
     "is_complete": false,
-    "gaps": ["2026-04-27 data not yet computed"],
+    "gaps": ["2026-04-28 data not yet computed"],
     "freshness_at": "2026-04-27T08:00:00Z"
   }
 }
@@ -113,7 +113,8 @@ in the requested window.
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `window` | object | yes | `{ start: ISO8601 date, end: ISO8601 date }` |
+| `days` | integer | yes | Number of days to look back from today, e.g. `7` |
+| `severity` | string | no | Filter by severity: `high`, `medium`, or `low`. If absent, returns all severities. |
 
 **Response**:
 
@@ -131,8 +132,8 @@ in the requested window.
     ]
   },
   "coverage": {
-    "requested": { "window": { "start": "2026-04-14", "end": "2026-04-27" } },
-    "covered":   { "window": { "start": "2026-04-14", "end": "2026-04-27" } },
+    "requested": { "days": 14 },
+    "covered":   { "days": 14 },
     "is_complete": true,
     "gaps": [],
     "freshness_at": "2026-04-27T08:00:00Z"
@@ -146,42 +147,30 @@ If no anomalies are detected: `"anomalies": []`. This is not an error.
 
 ### `trigger_scan`
 
-Requests a fresh computation of a metric for the latest available analysis
-date. Used when `check_metric` returns stale data (freshness_at is too old
-relative to the requested window).
+Requests a fresh computation for the latest available analysis date across
+all active metrics. Used when `get_recent_anomalies` returns stale data.
 
-**Parameters**:
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `name` | string | yes | Metric identifier |
+**Parameters**: none.
 
 `trigger_scan` operates on the latest available analysis date in pulse's data
-pipeline — it does not accept a window parameter. The analysis date covered
-by the resulting scan is reflected in `coverage.covered` of the response.
+pipeline. It does not target a specific metric or accept a window. The response
+is immediate — computation proceeds asynchronously on the pulse side.
 
 **Response**:
 
 ```json
 {
   "data": {
-    "scan_id": "scan_abc123",
-    "status": "queued",
-    "estimated_completion": "2026-04-27T09:15:00Z"
-  },
-  "coverage": {
-    "requested": { "name": "users_checkout/active" },
-    "covered":   {},
-    "is_complete": false,
-    "gaps": ["scan in progress — data not yet available"],
-    "freshness_at": null
+    "scan_accepted": true,
+    "message": "Scan triggered."
   }
 }
 ```
 
-`trigger_scan` is asynchronous. war-room does not poll for completion within
-the same investigation conversation. It notes the scan has been triggered and
-informs the PM that data will be available in a future conversation.
+`trigger_scan` is fire-and-forget. war-room records a local timestamp of when
+the scan was triggered and informs the PM that fresh data will be available in
+approximately 60 seconds via `get_recent_anomalies`. war-room does not poll
+for completion within the same conversation.
 
 ---
 
@@ -197,7 +186,7 @@ When a tool cannot return data, `data` is absent and `error` is present:
     "message": "pulse data pipeline is temporarily unavailable"
   },
   "coverage": {
-    "requested": { "name": "users_checkout/active", "window": { "start": "2026-04-14", "end": "2026-04-27" }, "platform": "mx_android" },
+    "requested": { "metric_name": "users_checkout/active", "days": 14, "platform": "mx_android" },
     "covered":   {},
     "is_complete": false,
     "gaps": ["source unavailable"],
@@ -242,6 +231,3 @@ Return data using these exact identifiers:
 - war-room does not version MCP contracts. Changes to tool signatures or
   response structure require coordination with the war-room team before
   deployment. Contact: felip.costa@gotrendier.com.
-- `trigger_scan` is a new capability. If it cannot be implemented by the
-  time war-room reaches Phase 2, war-room can operate without it — it will
-  report stale data rather than triggering a fresh scan.
