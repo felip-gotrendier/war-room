@@ -25,7 +25,7 @@ in each repo:
 **Pulse** — check that an MCP endpoint exists and responds:
 ```bash
 # Replace 8001 with the actual port pulse uses
-curl -s http://localhost:8001/mcp -X POST \
+curl -s http://localhost:8001/mcp/mcp -X POST \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python3 -m json.tool
 ```
@@ -34,7 +34,7 @@ Expected: a list containing `check_metric`, `get_recent_anomalies`, `trigger_sca
 **Release-agent** — same check:
 ```bash
 # Replace 8002 with the actual port release-agent uses
-curl -s http://localhost:8002/mcp -X POST \
+curl -s http://localhost:8002/mcp/mcp -X POST \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python3 -m json.tool
 ```
@@ -99,7 +99,8 @@ SLACK_CHANNEL=...                # ídem
 document: `8001`. Si és diferent, ajusta les comandes de les seccions
 2, 3 i 4.
 
-**MCP path esperat**: `/mcp` (stateless_http=True per als tres serveis).
+**MCP path esperat**: `/mcp/mcp` — l'app FastAPI dels serveis és muntada a `/mcp` i
+el handler MCP dins d'ella també a `/mcp`, resultant en el path doble.
 
 ---
 
@@ -138,8 +139,8 @@ del tech lead (veure Secció 5 per com habilitar el cas complet).
 **Env vars requerits**:
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-export PULSE_MCP_URL=http://localhost:8001/mcp
-export RELEASE_AGENT_MCP_URL=http://localhost:8002/mcp
+export PULSE_MCP_URL=http://localhost:8001/mcp/mcp
+export RELEASE_AGENT_MCP_URL=http://localhost:8002/mcp/mcp
 ```
 No cal cap token addicional — war-room és un client pur MCP.
 Mock auth: l'header `X-User-Id` s'envia directament als tests; no requereix
@@ -199,8 +200,8 @@ l'orchestrator directament. Si vols provar la API REST manualment:
 ```bash
 cd war-room
 source .venv/bin/activate
-ANTHROPIC_API_KEY=... PULSE_MCP_URL=http://localhost:8001/mcp \
-  RELEASE_AGENT_MCP_URL=http://localhost:8002/mcp \
+ANTHROPIC_API_KEY=... PULSE_MCP_URL=http://localhost:8001/mcp/mcp \
+  RELEASE_AGENT_MCP_URL=http://localhost:8002/mcp/mcp \
   uvicorn api.main:app --port 8000 --reload
 ```
 
@@ -231,14 +232,14 @@ de la terminal corresponent.
 **Verificació addicional — eines MCP registrades:**
 ```bash
 # Confirmar que pulse exposa les eines esperades
-curl -s http://localhost:8001/mcp -X POST \
+curl -s http://localhost:8001/mcp/mcp -X POST \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
   | python3 -c "import sys,json; tools=[t['name'] for t in json.load(sys.stdin)['result']['tools']]; print(tools)"
 # Esperat: ['check_metric', 'get_recent_anomalies', 'trigger_scan'] (ordre pot variar)
 
 # Confirmar que release-agent exposa les eines esperades
-curl -s http://localhost:8002/mcp -X POST \
+curl -s http://localhost:8002/mcp/mcp -X POST \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
   | python3 -c "import sys,json; tools=[t['name'] for t in json.load(sys.stdin)['result']['tools']]; print(tools)"
@@ -254,8 +255,8 @@ cd war-room
 source .venv/bin/activate
 
 ANTHROPIC_API_KEY=sk-ant-... \
-PULSE_MCP_URL=http://localhost:8001/mcp \
-RELEASE_AGENT_MCP_URL=http://localhost:8002/mcp \
+PULSE_MCP_URL=http://localhost:8001/mcp/mcp \
+RELEASE_AGENT_MCP_URL=http://localhost:8002/mcp/mcp \
   .venv/bin/pytest tests/integration/test_anchor_use_case.py -v -s
 ```
 
