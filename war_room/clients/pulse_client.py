@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timezone
 
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 
 from war_room.models import Coverage, WarRoomFinding
 
@@ -124,7 +124,7 @@ async def _call_with_retry(tool_name: str, arguments: dict) -> dict:
 
 async def _call(tool_name: str, arguments: dict) -> dict:
     url = _url()
-    async with streamablehttp_client(url) as (read, write, _):
+    async with streamable_http_client(url) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(tool_name, arguments)
