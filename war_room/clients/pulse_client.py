@@ -52,7 +52,7 @@ async def trigger_scan() -> WarRoomFinding:
 
 def _parse_check_metric(raw: dict, requested_args: dict) -> WarRoomFinding:
     coverage = _extract_coverage(raw, requested_args)
-    if "error" in raw:
+    if raw.get("error") is not None:
         return WarRoomFinding(
             source="pulse",
             tool="check_metric",
@@ -69,7 +69,7 @@ def _parse_check_metric(raw: dict, requested_args: dict) -> WarRoomFinding:
 
 def _parse_anomalies(raw: dict, requested_args: dict) -> WarRoomFinding:
     coverage = _extract_coverage(raw, requested_args)
-    if "error" in raw:
+    if raw.get("error") is not None:
         return WarRoomFinding(
             source="pulse",
             tool="get_recent_anomalies",
