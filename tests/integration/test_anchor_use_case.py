@@ -121,7 +121,7 @@ async def test_iteration_cap_respected(conversation):
 async def test_summarize_after_investigation(conversation):
     """After a complete investigation, summarize must produce a valid document."""
     pm_question = (
-        "Revisemos users_checkout/active en los últimos 7 días en todas las plataformas."
+        "Revisemos users_gross_transaction/active en los últimos 7 días en todas las plataformas."
     )
     _, ctx = await orchestrator.turn(conversation, pm_question)
 
