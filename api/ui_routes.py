@@ -51,7 +51,7 @@ def _get_user(request: Request) -> AuthUser | None:
     return None
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse, response_model=None)
 async def landing(request: Request) -> HTMLResponse | RedirectResponse:
     user = _get_user(request)
     if user is None:
@@ -66,7 +66,7 @@ async def landing(request: Request) -> HTMLResponse | RedirectResponse:
     )
 
 
-@router.get("/conversations/{id}/view", response_class=HTMLResponse)
+@router.get("/conversations/{id}/view", response_class=HTMLResponse, response_model=None)
 async def conversation_view(
     id: str, request: Request
 ) -> HTMLResponse | RedirectResponse:
