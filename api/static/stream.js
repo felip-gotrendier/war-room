@@ -183,40 +183,35 @@ function showToolBadge(tool, input) {
   _activeBadges[tool] = wrapper;
 }
 
-function completeToolBadge(tool, data) {
-  const wrapper = _activeBadges[tool];
-  if (!wrapper) return;
-  delete _activeBadges[tool];
-
+/* Apply completion state to a tool card wrapper.
+ * Used by both completeToolBadge (live SSE) and the DOMContentLoaded static-card
+ * initializer (persisted view) — same code path guarantees coherence by construction.
+ * TODO (C5): on dark/light toggle, destroy and recreate Chart instances so grid
+ * and tick colors stay in sync with the theme.
+ */
+function _applyCompletedState(wrapper, tool, source, uiData, coverage) {
   const card = wrapper.firstElementChild;
   const dot = card.querySelector('[data-role="tool-dot"]');
   const label = card.querySelector('[data-role="tool-label"]');
   const chartContainer = card.querySelector('[data-role="tool-chart"]');
   const gapRow = card.querySelector('[data-role="tool-gap"]');
 
-  const source = data && data.source;
-  const coverage = (data && data.coverage) || { is_complete: true, gaps: [] };
-  const uiData = (data && data.ui_data) || {};
   const hasGap = !coverage.is_complete && coverage.gaps && coverage.gaps.length > 0;
   const style = SOURCE_STYLES[source] || _DEFAULT_STYLE;
 
-  // Stop pulse animation, update dot color
   if (dot) {
     dot.className = `w-1.5 h-1.5 rounded-full flex-shrink-0 ${hasGap ? 'bg-amber-400' : 'bg-emerald-400'}`;
   }
 
-  // Update label to source name with source color
   if (label && source) {
     label.textContent = style.label;
     label.className = `font-medium ${style.text}`;
   }
 
-  // Chart for check_metric — only if platforms data is present and Chart.js loaded
-  // Color detection happens at render time: charts already in the DOM will not
-  // automatically update on theme toggle.
-  // TODO (C5): when implementing the dark/light toggle, also destroy and recreate
-  // active Chart instances so grid and tick colors stay in sync with the theme.
-  const platforms = uiData.platforms;
+  // Chart for check_metric — only if platforms data is present and Chart.js loaded.
+  // If Chart is undefined (CDN unreachable): chartContainer stays hidden,
+  // card remains compact — no JS error, no empty whitespace.
+  const platforms = uiData && uiData.platforms;
   if (chartContainer && platforms && platforms.length > 0 && typeof Chart !== 'undefined') {
     card.style.width = '420px';
     chartContainer.classList.remove('hidden');
@@ -228,7 +223,6 @@ function completeToolBadge(tool, data) {
     const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
     const tickColor = isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.40)';
 
-    // Use the first platform's dates as shared x-axis labels
     const labels = (platforms[0].series || []).map(s => formatIsoDate(s.date));
 
     const datasets = platforms.map((p, i) => {
@@ -271,22 +265,30 @@ function completeToolBadge(tool, data) {
       },
     });
   }
-  // If Chart is undefined (CDN unreachable): chartContainer stays hidden,
-  // card remains compact — no JS error, no empty whitespace.
 
-  // Coverage gap row
   if (gapRow && hasGap) {
     gapRow.textContent = `⚠ ${coverage.gaps[0]}`;
     gapRow.classList.remove('hidden');
   }
 
-  // Update card border color for source
   if (source && SOURCE_STYLES[source]) {
     card.className = card.className
       .replace('border-zinc-200/60 dark:border-zinc-700/30', style.ring);
   }
 
   thread.scrollTop = thread.scrollHeight;
+}
+
+function completeToolBadge(tool, data) {
+  const wrapper = _activeBadges[tool];
+  if (!wrapper) return;
+  delete _activeBadges[tool];
+
+  const source = data && data.source;
+  const coverage = (data && data.coverage) || { is_complete: true, gaps: [] };
+  const uiData = (data && data.ui_data) || {};
+
+  _applyCompletedState(wrapper, tool, source, uiData, coverage);
 }
 
 /* ── SSE event handler ───────────────────────────────────────── */
@@ -323,6 +325,16 @@ function handleSseEvent(type, data) {
 /* ── Form submit handler ─────────────────────────────────────── */
 
 document.addEventListener('DOMContentLoaded', () => {
+  /* Initialise persisted tool cards rendered by the server on page load. */
+  document.querySelectorAll('[data-role="static-tool-card"]').forEach(wrapper => {
+    const tool = wrapper.dataset.tool;
+    const source = wrapper.dataset.source;
+    let uiData = {}, coverage = { is_complete: true, gaps: [] };
+    try { uiData = JSON.parse(wrapper.dataset.uiData || '{}'); } catch {}
+    try { coverage = JSON.parse(wrapper.dataset.coverage || '{}'); } catch {}
+    _applyCompletedState(wrapper, tool, source, uiData, coverage);
+  });
+
   const form = document.getElementById('send-form');
   if (!form) return;
 

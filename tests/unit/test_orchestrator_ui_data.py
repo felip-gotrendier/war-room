@@ -5,7 +5,7 @@ type without touching external services.
 """
 from __future__ import annotations
 
-from war_room.orchestrator import _compact_ui_data
+from war_room.orchestrator import compact_ui_data as _compact_ui_data
 
 
 def _result(tool: str, data: dict, *, is_complete: bool = True) -> dict:

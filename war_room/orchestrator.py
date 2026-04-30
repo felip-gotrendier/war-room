@@ -183,7 +183,7 @@ async def _run_loop(
                         "is_complete": result["coverage"]["is_complete"],
                         "gaps": result["coverage"]["gaps"],
                     },
-                    "ui_data": _compact_ui_data(block.name, result),
+                    "ui_data": compact_ui_data(block.name, result),
                 })
             tool_results_content.append({
                 "type": "tool_result",
@@ -247,7 +247,7 @@ def _has_repo_gap(context: ConversationContext) -> bool:
     return False
 
 
-def _compact_ui_data(tool_name: str, result: dict) -> dict:
+def compact_ui_data(tool_name: str, result: dict) -> dict:
     """Extract minimal display data from a tool result for the SSE tool_complete event."""
     data = result.get("data", {})
     if tool_name == "check_metric":

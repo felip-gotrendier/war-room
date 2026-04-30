@@ -58,6 +58,30 @@
   <div id="message-thread"
        class="flex-1 overflow-y-auto px-6 py-5 space-y-4 scroll-smooth">
     {% for msg in display_messages %}
+      {% if msg.role == 'tool_card' %}
+      <div class="flex justify-start"
+           data-role="static-tool-card"
+           data-tool="{{ msg.tool }}"
+           data-source="{{ msg.source }}"
+           data-ui-data="{{ msg.ui_data | attr_json }}"
+           data-coverage="{{ msg.coverage | attr_json }}">
+        <div class="inline-flex flex-col gap-1.5 px-3 py-2 rounded-lg text-xs border
+                    bg-zinc-50 border-zinc-200/60 text-zinc-500
+                    dark:bg-zinc-800/40 dark:border-zinc-700/30 dark:text-zinc-500">
+          <div class="flex items-center gap-2">
+            <span data-role="tool-dot"
+                  class="w-1.5 h-1.5 rounded-full bg-zinc-400 flex-shrink-0"></span>
+            <span data-role="tool-label" class="font-medium"></span>
+            {% if msg.summary %}
+            <span class="text-zinc-300 dark:text-zinc-700 select-none">·</span>
+            <span class="font-mono truncate max-w-[200px]">{{ msg.summary }}</span>
+            {% endif %}
+          </div>
+          <div data-role="tool-chart" class="hidden" style="height:200px;position:relative;"></div>
+          <div data-role="tool-gap" class="hidden pl-3.5 truncate text-amber-600 dark:text-amber-400"></div>
+        </div>
+      </div>
+      {% else %}
       {% set text = msg.content | message_text %}
       {% if text and msg.role in ('user', 'assistant') %}
       <div class="flex {{ 'justify-end' if msg.role == 'user' else 'justify-start' }}">
@@ -68,6 +92,7 @@
           <p class="whitespace-pre-wrap">{{ text }}</p>
         </div>
       </div>
+      {% endif %}
       {% endif %}
     {% endfor %}
 

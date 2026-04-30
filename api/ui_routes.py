@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 from api.auth_utils import COOKIE_NAME, AuthUser, get_session_user
 from war_room.conversation_repository import ConversationAccessDenied, ConversationNotFound
 from war_room.db import get_db_path
+from war_room.orchestrator import compact_ui_data
 
 router = APIRouter()
 
@@ -30,6 +33,82 @@ def _message_text(content: Any) -> str:
         ]
         return "\n".join(p for p in parts if p)
     return ""
+
+
+def _tool_input_summary(input_dict: dict, tool: str) -> str:
+    """Mirror of stream.js toolInputSummary — pre-compute meta text for static cards."""
+    if not input_dict:
+        return ""
+    if tool == "check_metric":
+        return input_dict.get("metric_name", "")
+    if tool == "get_recent_anomalies":
+        return f"last {input_dict.get('days', 7)}d"
+    if tool == "get_releases":
+        return input_dict.get("repo", "")
+    if tool in ("get_release", "explain_release"):
+        repo = input_dict.get("repo", "")
+        rid = input_dict.get("id", "")
+        return f"{repo}/{rid}" if repo else ""
+    return ""
+
+
+def _extract_tool_cards(messages: list[dict]) -> list[dict]:
+    """Scan a PM turn slice for tool_use/tool_result pairs and return tool_card dicts.
+
+    Edge cases:
+    - tool_use with no matching tool_result (tool never returned): silently skipped.
+    - Multiple tool_use blocks in the same assistant message: all are iterated.
+    - Malformed tool_result JSON: silently skipped.
+    """
+    cards = []
+    for k, msg in enumerate(messages):
+        if msg.get("role") != "assistant":
+            continue
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            continue
+        tool_uses = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
+        if not tool_uses:
+            continue
+        # Find the next user message in this slice that contains tool_result blocks.
+        next_user_content: list[dict] = []
+        for m in messages[k + 1:]:
+            if m.get("role") == "user" and isinstance(m.get("content"), list):
+                next_user_content = m["content"]
+                break
+        for tool_use in tool_uses:
+            tool_name = tool_use.get("name", "")
+            tool_id = tool_use.get("id", "")
+            tool_input = tool_use.get("input", {})
+            result_json = None
+            for item in next_user_content:
+                if (
+                    isinstance(item, dict)
+                    and item.get("type") == "tool_result"
+                    and item.get("tool_use_id") == tool_id
+                ):
+                    result_json = item.get("content", "")
+                    break
+            if not result_json:
+                continue
+            try:
+                result_data = json.loads(result_json)
+                cov = result_data.get("coverage", {})
+                cards.append({
+                    "role": "tool_card",
+                    "tool": tool_name,
+                    "input": tool_input,
+                    "summary": _tool_input_summary(tool_input, tool_name),
+                    "source": result_data.get("source", "unknown"),
+                    "coverage": {
+                        "is_complete": cov.get("is_complete", True),
+                        "gaps": cov.get("gaps", []),
+                    },
+                    "ui_data": compact_ui_data(tool_name, result_data),
+                })
+            except (json.JSONDecodeError, KeyError, TypeError):
+                continue
+    return cards
 
 
 def _display_messages(messages: list[dict]) -> list[dict]:
@@ -88,6 +167,7 @@ def _display_messages(messages: list[dict]) -> list[dict]:
 
             if pm_question:
                 result.append({"role": "user", "content": pm_question})
+            result.extend(_extract_tool_cards(messages[i:j]))
             if last_asst is not None:
                 result.append(last_asst)
 
@@ -102,6 +182,7 @@ def _display_messages(messages: list[dict]) -> list[dict]:
 
 
 templates.env.filters["message_text"] = _message_text
+templates.env.filters["attr_json"] = lambda obj: html.escape(json.dumps(obj))
 
 
 def _oauth_enabled() -> bool:

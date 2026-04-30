@@ -233,6 +233,47 @@ def test_display_messages_multi_turn_shows_correct_final_replies():
     assert result[3]["content"][0]["text"] == "Reply B"
 
 
+def test_display_messages_includes_tool_cards():
+    """Tool cards appear in display_messages between the PM question and final reply."""
+    import json as _json
+    from api.ui_routes import _display_messages
+
+    result_payload = _json.dumps({
+        "source": "pulse",
+        "tool": "check_metric",
+        "data": {"metric": "orders/count", "platforms": []},
+        "coverage": {
+            "requested": "x", "covered": "x",
+            "is_complete": True, "gaps": [], "freshness_at": None,
+        },
+    })
+    msgs = [
+        {"role": "user", "content": "You are source-routing.\n\nWhy did orders drop?"},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "tu_1", "name": "check_metric",
+             "input": {"metric_name": "orders/count", "days": 7}},
+        ]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "tu_1", "content": result_payload},
+        ]},
+        {"role": "user", "content": "You are funnel-investigator.\n\nWhy did orders drop?"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Orders dropped 12%."}]},
+    ]
+    result = _display_messages(msgs)
+
+    roles = [m["role"] for m in result]
+    assert "tool_card" in roles
+
+    cards = [m for m in result if m["role"] == "tool_card"]
+    assert len(cards) == 1
+    assert cards[0]["tool"] == "check_metric"
+    assert cards[0]["source"] == "pulse"
+    assert cards[0]["coverage"]["is_complete"] is True
+    # tool_card must sit between PM question and final reply
+    assert roles.index("tool_card") > roles.index("user")
+    assert roles.index("tool_card") < roles.index("assistant")
+
+
 def test_conversation_view_does_not_render_skill_prompts(client):
     from unittest.mock import AsyncMock, patch
     from anthropic.types import Message
@@ -259,3 +300,57 @@ def test_conversation_view_does_not_render_skill_prompts(client):
     resp = client.get(f"/conversations/{conv_id}/view", headers={"X-User-Id": "sub-sp"})
     assert resp.status_code == 200
     assert "You are " not in resp.text
+
+
+def test_conversation_view_static_tool_card_rendered(client):
+    """After a tool call, reloading the conversation renders a static tool card."""
+    from unittest.mock import AsyncMock, patch
+    from anthropic.types import Message
+    from war_room import orchestrator as orch
+
+    create_resp = client.post("/conversations", headers={"X-User-Id": "sub-tc"})
+    conv_id = create_resp.json()["id"]
+
+    tool_resp = Message(**{
+        "id": "msg_tc1", "type": "message", "role": "assistant",
+        "content": [{"type": "tool_use", "id": "tu_1", "name": "check_metric",
+                     "input": {"metric_name": "orders/count", "days": 7}}],
+        "model": "claude-sonnet-4-6", "stop_reason": "end_turn",
+        "stop_sequence": None, "usage": {"input_tokens": 5, "output_tokens": 5},
+    })
+    text_resp = Message(**{
+        "id": "msg_tc2", "type": "message", "role": "assistant",
+        "content": [{"type": "text", "text": "Orders dropped."}],
+        "model": "claude-sonnet-4-6", "stop_reason": "end_turn",
+        "stop_sequence": None, "usage": {"input_tokens": 5, "output_tokens": 5},
+    })
+
+    call_n = 0
+
+    async def _side(*a, **kw):
+        nonlocal call_n
+        call_n += 1
+        return tool_resp if call_n == 1 else text_resp
+
+    dispatch_result = {
+        "source": "pulse", "tool": "check_metric",
+        "data": {"metric": "orders/count", "platforms": []},
+        "coverage": {
+            "requested": "x", "covered": "x",
+            "is_complete": True, "gaps": [], "freshness_at": None,
+        },
+    }
+
+    with patch.object(orch._client.messages, "create", side_effect=_side):
+        with patch.object(orch, "_dispatch_tool", new=AsyncMock(return_value=dispatch_result)):
+            client.post(
+                f"/conversations/{conv_id}/messages/stream",
+                headers={"X-User-Id": "sub-tc"},
+                json={"message": "Why did orders drop?"},
+            )
+
+    resp = client.get(f"/conversations/{conv_id}/view", headers={"X-User-Id": "sub-tc"})
+    assert resp.status_code == 200
+    assert 'data-role="static-tool-card"' in resp.text
+    assert 'data-tool="check_metric"' in resp.text
+    assert 'data-source="pulse"' in resp.text
