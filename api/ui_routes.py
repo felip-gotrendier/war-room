@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import json
 import os
+from markupsafe import Markup
 from pathlib import Path
 from typing import Any
 
@@ -182,7 +183,7 @@ def _display_messages(messages: list[dict]) -> list[dict]:
 
 
 templates.env.filters["message_text"] = _message_text
-templates.env.filters["attr_json"] = lambda obj: html.escape(json.dumps(obj))
+templates.env.filters["attr_json"] = lambda obj: Markup(html.escape(json.dumps(obj)))
 
 
 def _oauth_enabled() -> bool:

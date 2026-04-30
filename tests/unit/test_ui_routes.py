@@ -354,3 +354,19 @@ def test_conversation_view_static_tool_card_rendered(client):
     assert 'data-role="static-tool-card"' in resp.text
     assert 'data-tool="check_metric"' in resp.text
     assert 'data-source="pulse"' in resp.text
+
+    # Verify data-ui-data is single-escaped (not double-escaped) and JS-parseable.
+    # The browser decodes one level of HTML entities; JSON.parse must then succeed.
+    import re, html as _html, json as _json
+
+    m = re.search(r'data-ui-data="([^"]*)"', resp.text)
+    assert m, "data-ui-data attribute not found"
+    ui_data = _json.loads(_html.unescape(m.group(1)))
+    assert ui_data.get("metric") == "orders/count"
+    assert "platforms" in ui_data
+
+    m2 = re.search(r'data-coverage="([^"]*)"', resp.text)
+    assert m2, "data-coverage attribute not found"
+    coverage = _json.loads(_html.unescape(m2.group(1)))
+    assert "is_complete" in coverage
+    assert "gaps" in coverage

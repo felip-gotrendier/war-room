@@ -120,6 +120,7 @@ function toolInputSummary(tool, input) {
 /* ── Tool progress cards ─────────────────────────────────────── */
 
 const _activeBadges = {};
+let _synthBadge = null;
 
 function showToolBadge(tool, input) {
   const summary = toolInputSummary(tool, input);
@@ -181,6 +182,37 @@ function showToolBadge(tool, input) {
   thread.scrollTop = thread.scrollHeight;
 
   _activeBadges[tool] = wrapper;
+}
+
+function showSynthesizing() {
+  if (_synthBadge) return;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'flex justify-start';
+
+  const card = document.createElement('div');
+  card.className = [
+    'inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs border',
+    'bg-zinc-50 border-zinc-200/60 text-zinc-500',
+    'dark:bg-zinc-800/40 dark:border-zinc-700/30 dark:text-zinc-500',
+  ].join(' ');
+
+  const dot = document.createElement('span');
+  dot.className = 'w-1.5 h-1.5 rounded-full bg-zinc-400 animate-pulse flex-shrink-0';
+
+  const label = document.createElement('span');
+  label.className = 'font-medium';
+  label.textContent = 'Analysing findings…';
+
+  card.appendChild(dot);
+  card.appendChild(label);
+  wrapper.appendChild(card);
+  thread.appendChild(wrapper);
+  thread.scrollTop = thread.scrollHeight;
+  _synthBadge = wrapper;
+}
+
+function hideSynthesizing() {
+  if (_synthBadge) { _synthBadge.remove(); _synthBadge = null; }
 }
 
 /* Apply completion state to a tool card wrapper.
@@ -296,15 +328,21 @@ function completeToolBadge(tool, data) {
 function handleSseEvent(type, data) {
   switch (type) {
     case 'tool_start':
+      hideSynthesizing();
       showToolBadge(data.tool, data.input);
       break;
     case 'tool_complete':
       completeToolBadge(data.tool, data);
       break;
+    case 'synthesizing':
+      showSynthesizing();
+      break;
     case 'text':
+      hideSynthesizing();
       appendMessage('assistant', data.text);
       break;
     case 'done':
+      hideSynthesizing();
       if (data.iteration_count >= 15) { window.location.reload(); return; }
       const counter = document.querySelector('[data-role="iter-counter"]');
       if (counter) counter.textContent = `${data.iteration_count} / 15 iterations`;
@@ -316,6 +354,7 @@ function handleSseEvent(type, data) {
       }
       break;
     case 'error':
+      hideSynthesizing();
       if (data.code === 'iteration_cap_reached') { window.location.reload(); return; }
       appendMessage('assistant', 'Error: ' + escHtml(data.detail || 'Unknown error'));
       break;

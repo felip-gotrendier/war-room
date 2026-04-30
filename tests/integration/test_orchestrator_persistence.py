@@ -167,6 +167,50 @@ async def test_event_queue_receives_tool_start_and_complete(repo):
     assert events[complete_idx]["ui_data"] == {"metric": "", "platforms": []}
 
 
+async def test_event_queue_includes_synthesizing_after_tool_complete(repo):
+    """synthesizing event appears in the queue after tool_complete, before text."""
+    import asyncio
+
+    ctx = repo.create(user_id="sub-synth", user_email="user@example.com")
+
+    tool_resp = _fake_message([
+        {"type": "tool_use", "id": "tu_s1", "name": "check_metric",
+         "input": {"metric_name": "orders/count", "days": 7}},
+    ])
+    text_resp = _fake_message([{"type": "text", "text": "Synthesis done."}])
+
+    call_n = 0
+
+    async def _side(*a, **kw):
+        nonlocal call_n
+        call_n += 1
+        return tool_resp if call_n == 1 else text_resp
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    with patch.object(orchestrator._client.messages, "create", side_effect=_side):
+        with patch.object(
+            orchestrator, "_dispatch_tool",
+            new=AsyncMock(return_value={
+                "source": "pulse", "tool": "check_metric", "data": {},
+                "coverage": {"requested": "x", "covered": "x",
+                             "is_complete": True, "gaps": [], "freshness_at": None},
+            }),
+        ):
+            await orchestrator.turn(ctx, "test", event_queue=queue)
+
+    events = []
+    while not queue.empty():
+        events.append(await queue.get())
+
+    types = [e["type"] for e in events]
+    assert "synthesizing" in types
+
+    complete_idx = types.index("tool_complete")
+    synth_idx = types.index("synthesizing")
+    assert complete_idx < synth_idx, "synthesizing must follow tool_complete"
+
+
 async def test_event_queue_none_does_not_break_turn(repo):
     """Passing event_queue=None (default) must not change turn behaviour."""
     ctx = repo.create(user_id="sub-none-eq", user_email="user@example.com")

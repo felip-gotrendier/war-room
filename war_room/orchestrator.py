@@ -210,6 +210,9 @@ async def _run_loop(
 
         context.messages.append({"role": "user", "content": tool_results_content})
 
+        if event_queue is not None:
+            await event_queue.put({"type": "synthesizing"})
+
 
 async def _maybe_inject_hypothesis(context: ConversationContext, last_text: str) -> None:
     """Inject hypothesis-formation prompt when findings are present."""
