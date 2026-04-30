@@ -179,6 +179,21 @@ implicitly authorised all reads and low-cost writes needed to answer it.
 **Workaround:** respond "sí" to the confirmation prompt. Does not degrade
 investigation quality.
 
+### Phase 2c — tool_start event: review inputs for sensitive data
+
+**Observed (Phase 2b.2 C4, 2026-04-30):** the `tool_start` SSE event now includes
+`"input": block.input` so the frontend can display metadata (metric name, repo, etc.)
+in the tool card before the result arrives. Current pulse and release-agent inputs are
+innocus (metric names, day counts, repo identifiers).
+
+**Deferred review before rita or any future tool integration.** When a new tool is
+wired up, verify that its input dict does not contain secrets (API keys, session tokens,
+PII, or internal identifiers that should not travel to the browser). If a tool input
+contains sensitive fields, strip them in `_compact_ui_data` or add an explicit
+`_safe_input(tool_name, input)` filter before the `tool_start` event is emitted.
+
+---
+
 ### Phase 2c — Skill prompt display filtering
 
 **Observed behaviour (Phase 2b.2, 2026-04-30):** `ctx.messages` contains raw skill

@@ -172,10 +172,19 @@ async def _run_loop(
         tool_results_content: list[dict] = []
         for block in tool_uses:
             if event_queue is not None:
-                await event_queue.put({"type": "tool_start", "tool": block.name})
+                await event_queue.put({"type": "tool_start", "tool": block.name, "input": block.input})
             result = await _dispatch_tool(block.name, block.input)
             if event_queue is not None:
-                await event_queue.put({"type": "tool_complete", "tool": block.name})
+                await event_queue.put({
+                    "type": "tool_complete",
+                    "tool": block.name,
+                    "source": result.get("source", "unknown"),
+                    "coverage": {
+                        "is_complete": result["coverage"]["is_complete"],
+                        "gaps": result["coverage"]["gaps"],
+                    },
+                    "ui_data": _compact_ui_data(block.name, result),
+                })
             tool_results_content.append({
                 "type": "tool_result",
                 "tool_use_id": block.id,
@@ -236,6 +245,28 @@ def _has_repo_gap(context: ConversationContext) -> bool:
                     if "REPO_NOT_FOUND" in c or "not confirmed" in c.lower():
                         return True
     return False
+
+
+def _compact_ui_data(tool_name: str, result: dict) -> dict:
+    """Extract minimal display data from a tool result for the SSE tool_complete event."""
+    data = result.get("data", {})
+    if tool_name == "check_metric":
+        platforms = data.get("platforms", [])
+        if platforms:
+            # Use the first platform as a representative sparkline.
+            # Multi-platform display would clutter the card (β tradeoff).
+            # If a platform-specific anomaly matters, the assistant text will call it out.
+            series = platforms[0].get("series", [])
+            return {
+                "metric": data.get("metric", ""),
+                "sparkline": [p["value"] for p in series],
+            }
+        return {"metric": data.get("metric", ""), "sparkline": []}
+    if tool_name == "get_recent_anomalies":
+        return {"anomaly_count": len(data.get("anomalies", []))}
+    if tool_name == "get_releases":
+        return {"release_count": len(data.get("releases", []))}
+    return {}
 
 
 def _serialize_content(content: list) -> list[dict]:

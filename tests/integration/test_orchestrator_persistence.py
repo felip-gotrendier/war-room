@@ -157,8 +157,14 @@ async def test_event_queue_receives_tool_start_and_complete(repo):
     complete_idx = types.index("tool_complete")
     assert start_idx < complete_idx, "tool_start must precede tool_complete"
 
-    assert events[start_idx]["tool"]    == "check_metric"
+    assert events[start_idx]["tool"] == "check_metric"
+    assert events[start_idx]["input"] == {"metric_name": "orders/count", "days": 7}
+
     assert events[complete_idx]["tool"] == "check_metric"
+    assert events[complete_idx]["source"] == "pulse"
+    assert events[complete_idx]["coverage"]["is_complete"] is True
+    assert events[complete_idx]["coverage"]["gaps"] == []
+    assert "ui_data" in events[complete_idx]
 
 
 async def test_event_queue_none_does_not_break_turn(repo):
