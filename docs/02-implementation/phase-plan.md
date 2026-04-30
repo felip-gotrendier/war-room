@@ -216,6 +216,57 @@ messages in the display layer without text-matching. Requires a coordinated chan
 
 ---
 
+## Phase 2b.2 — C5: header polish and source status indicators
+
+**Status**: active implementation (2026-04-30).
+
+### α — Chart re-render on dark/light theme toggle
+
+**File**: `api/static/stream.js`
+
+Chart.js instances read `isDark` at creation time and are not updated when
+the user toggles the theme via the Alpine.js button in the header. Charts
+created in dark mode retain dark grid/tick colors in light mode and vice versa.
+
+**Fix**: extract chart creation into `_createChart(canvas, platforms)`;
+maintain `_chartRegistry` (Map of canvas → `{chartInstance, platforms}`)
+to track live instances; add a `MutationObserver` on
+`document.documentElement` watching the `class` attribute. On toggle,
+destroy and recreate every registered Chart instance with the current theme
+colors.
+
+**Known limitation**: `_chartRegistry` has no cleanup today because tool
+cards are never removed from the DOM in normal use. When C6 (Save & Publish
+with slide-in sidebar) is implemented, cards may become removable — review
+registry cleanup at that point to avoid memory leaks.
+
+### β — Real source status indicators
+
+**Files**: `api/templates/base.html`, `api/routes.py`,
+`war_room/clients/pulse_client.py`, `war_room/clients/release_agent_client.py`
+
+Current header dots are hardcoded `bg-emerald-500` — always green regardless
+of whether the MCP servers are reachable.
+
+**Decisions (2026-04-30):**
+- Single fetch at page load, no polling. If live refresh becomes necessary in
+  practice, add later.
+- Binary states: `ok` (green) / `unreachable` (red).
+- Initial dot color: neutral grey. Updated when the fetch resolves. If the
+  fetch itself fails (war-room API unreachable from browser), dots stay grey
+  — not red, not green.
+- Ping mechanism: `session.initialize()` over the real MCP transport
+  (`streamable_http_client`). No dedicated health endpoint on external
+  servers — war-room proxies via its own `GET /sources/status`. This tests
+  the full end-to-end path the orchestrator uses.
+- Both pings run concurrently via `asyncio.gather`; 3-second timeout each.
+- If `PULSE_MCP_URL` / `RELEASE_AGENT_MCP_URL` are not configured, `ping()`
+  catches the `KeyError` and returns `False` → dot shows `unreachable`
+  (correct: the source is effectively unreachable from war-room's perspective).
+- Rita: remains labelled "— soon", out of scope until rita integration lands.
+
+---
+
 ## Risk summary
 
 | Phase | Controlled by | Primary risk |
