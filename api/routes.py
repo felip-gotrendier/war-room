@@ -281,13 +281,12 @@ async def delete_investigation(
     user: AuthUser = Depends(_require_user),
     inv_repo: SavedInvestigationRepository = Depends(_get_saved_inv_repo),
 ) -> None:
+    # ADR-005: any authenticated war-room user can delete any investigation.
+    # Team-trust model — this is an explicit policy, not missing access control.
     try:
-        inv = inv_repo.get(id)
+        inv_repo.delete(id)
     except SavedInvestigationNotFound:
         raise HTTPException(status_code=404, detail="Investigation not found")
-    if inv["published_by"] != user.user_id:
-        raise HTTPException(status_code=403, detail="Only the publisher can delete this investigation")
-    inv_repo.delete(id)
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" class="dark"
+      x-data="{
+        sidebarOpen: localStorage.getItem('wr-sidebar') !== 'closed',
+        dark: localStorage.getItem('wr-theme') !== 'light'
+      }"
+      x-init="
+        $watch('dark', v => localStorage.setItem('wr-theme', v ? 'dark' : 'light'));
+        $watch('sidebarOpen', v => localStorage.setItem('wr-sidebar', v ? 'open' : 'closed'));
+        if (!dark) $el.classList.remove('dark');
+      "
+      :class="{ 'dark': dark }">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}war room{% endblock %}</title>
+  <script>
+    /* Prevent flash: apply stored theme before Alpine.js or Tailwind run. */
+    if (localStorage.getItem('wr-theme') === 'light') {
+      document.documentElement.classList.remove('dark');
+    }
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { darkMode: 'class' }
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="h-screen flex flex-col overflow-hidden
+             bg-white text-zinc-900
+             dark:bg-zinc-950 dark:text-zinc-100
+             font-sans antialiased">
+
+  <!-- ── Header ───────────────────────────────────────────────── -->
+  <header class="flex-shrink-0 flex items-center justify-between h-11 px-4
+                 border-b border-zinc-200 dark:border-zinc-800/70">
+    <div class="flex items-center gap-3">
+      <button @click="sidebarOpen = !sidebarOpen"
+              class="p-1 rounded text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100
+                     dark:text-zinc-500 dark:hover:text-zinc-200 dark:hover:bg-zinc-800
+                     transition-colors"
+              title="Toggle sidebar">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+      <a href="/"
+         class="text-sm font-semibold tracking-tight
+                text-zinc-800 hover:text-zinc-950
+                dark:text-zinc-100 dark:hover:text-white
+                transition-colors">
+        war room
+      </a>
+    </div>
+
+    <div class="flex items-center gap-5 text-xs">
+      <!-- Source status indicators -->
+      <div class="flex items-center gap-3 text-zinc-400 dark:text-zinc-500">
+        <span class="flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>pulse
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>release_agent
+        </span>
+        <span class="text-zinc-300 dark:text-zinc-700">rita — soon</span>
+      </div>
+
+      <!-- Theme toggle + user -->
+      <div class="flex items-center gap-3 pl-4 border-l border-zinc-200 dark:border-zinc-800">
+        <button @click="dark = !dark"
+                class="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-200 transition-colors"
+                title="Toggle theme">
+          <!-- sun (shown in dark mode) -->
+          <svg x-show="dark" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <!-- moon (shown in light mode) -->
+          <svg x-show="!dark" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+        <span class="text-zinc-500 dark:text-zinc-400">{{ user.user_email }}</span>
+        <a href="/auth/logout"
+           class="text-zinc-400 hover:text-zinc-600 dark:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
+          logout
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Layout: sidebar + main ──────────────────────────────── -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- Sidebar -->
+    <aside x-show="sidebarOpen"
+           class="w-60 flex-shrink-0 flex flex-col overflow-hidden
+                  border-r border-zinc-200 dark:border-zinc-800/70
+                  bg-zinc-50 dark:bg-zinc-950">
+      <!-- New investigation -->
+      <div class="p-2.5 border-b border-zinc-200 dark:border-zinc-800/70">
+        <button onclick="createConversation()"
+                class="flex items-center justify-center gap-2 w-full px-3 py-2
+                       text-xs font-medium text-white rounded-md transition-colors
+                       bg-violet-600 hover:bg-violet-500 active:bg-violet-700">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                  d="M12 4v16m8-8H4"/>
+          </svg>
+          New investigation
+        </button>
+      </div>
+      <!-- Conversation list -->
+      <nav class="flex-1 overflow-y-auto p-1.5 space-y-px">
+        {% block sidebar_items %}{% endblock %}
+      </nav>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 overflow-hidden flex flex-col min-w-0">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <script>
+    async function createConversation() {
+      const resp = await fetch('/conversations', { method: 'POST' });
+      if (resp.ok) {
+        const data = await resp.json();
+        window.location.href = `/conversations/${data.id}/view`;
+      }
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

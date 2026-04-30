@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+
+{% block title %}{{ metadata.title }} — war room{% endblock %}
+
+{% block sidebar_items %}
+  {% for conv in conversations %}
+  <a href="/conversations/{{ conv.id }}/view"
+     class="flex flex-col px-2.5 py-2 rounded text-left transition-colors
+            {% if conv.id == ctx.id %}
+              bg-zinc-200 dark:bg-zinc-800/80
+            {% else %}
+              hover:bg-zinc-100 dark:hover:bg-zinc-800/60
+            {% endif %}">
+    <span class="text-xs font-medium truncate
+                 {% if conv.id == ctx.id %}text-zinc-900 dark:text-zinc-100
+                 {% else %}text-zinc-600 dark:text-zinc-300{% endif %}">
+      {{ conv.title }}
+    </span>
+    <span class="text-xs mt-0.5 text-zinc-400 dark:text-zinc-600">
+      {{ conv.iteration_count }} iter · {{ conv.last_active_at[:10] }}
+    </span>
+  </a>
+  {% else %}
+  <p class="text-xs px-2.5 py-3 text-zinc-400 dark:text-zinc-700">
+    No investigations yet.
+  </p>
+  {% endfor %}
+{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-full relative" x-data="{ publishing: false }">
+
+  <!-- ── Conversation header ──────────────────────────────────── -->
+  <div class="flex-shrink-0 flex items-center justify-between px-6 py-3
+              border-b border-zinc-200 dark:border-zinc-800/70">
+    <div>
+      <h1 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+        {{ metadata.title }}
+      </h1>
+      <p class="text-xs mt-0.5 text-zinc-400 dark:text-zinc-500">
+        {{ ctx.iteration_count }} / 15 iterations
+        {% if published %} · <span class="text-emerald-600 dark:text-emerald-500">published</span>{% endif %}
+      </p>
+    </div>
+    {% if ctx.current_hypothesis %}
+    <button @click="publishing = true"
+            class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors text-white
+                   {% if published %}bg-zinc-600 hover:bg-zinc-500{% else %}bg-emerald-600 hover:bg-emerald-500{% endif %}">
+      {{ "Republish" if published else "Publish" }}
+    </button>
+    {% endif %}
+  </div>
+
+  <!-- ── Message thread ──────────────────────────────────────── -->
+  <div id="message-thread"
+       class="flex-1 overflow-y-auto px-6 py-5 space-y-4 scroll-smooth">
+    {% for msg in ctx.messages %}
+      {% set text = msg.content | message_text %}
+      {% if text and msg.role in ('user', 'assistant') %}
+      <div class="flex {{ 'justify-end' if msg.role == 'user' else 'justify-start' }}">
+        <div class="max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed
+                    {{ 'bg-violet-100 text-violet-900 rounded-br-sm dark:bg-violet-600/25 dark:text-violet-100'
+                       if msg.role == 'user'
+                       else 'bg-zinc-100 text-zinc-800 rounded-bl-sm dark:bg-zinc-800/80 dark:text-zinc-200' }}">
+          <p class="whitespace-pre-wrap">{{ text }}</p>
+        </div>
+      </div>
+      {% endif %}
+    {% endfor %}
+
+    {% if not ctx.messages %}
+    <div class="flex items-center justify-center h-full py-16">
+      <p class="text-sm text-zinc-400 dark:text-zinc-600">
+        Describe the anomaly you're investigating to begin.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Hypothesis card ─────────────────────────────────────── -->
+  {% if ctx.current_hypothesis %}
+  <div class="flex-shrink-0 mx-6 mb-3 px-4 py-3 rounded-lg
+              bg-zinc-100 border border-zinc-200
+              dark:bg-zinc-800/50 dark:border-zinc-700/50">
+    <p class="text-xs font-semibold uppercase tracking-wide mb-1
+              text-zinc-400 dark:text-zinc-500">Current hypothesis</p>
+    <p class="text-sm leading-relaxed text-zinc-700 dark:text-zinc-200">
+      {{ ctx.current_hypothesis }}
+    </p>
+  </div>
+  {% endif %}
+
+  <!-- ── Iteration cap banner ────────────────────────────────── -->
+  {% if cap_reached %}
+  <div class="flex-shrink-0 mx-6 mb-3 px-4 py-2.5 rounded-lg text-xs
+              bg-amber-50 border border-amber-200 text-amber-800
+              dark:bg-amber-900/25 dark:border-amber-700/40 dark:text-amber-300">
+    Investigation reached the 15-iteration limit.
+    Publish the findings or open a new investigation to continue.
+  </div>
+  {% endif %}
+
+  <!-- ── Input form ──────────────────────────────────────────── -->
+  <div class="flex-shrink-0 px-6 pt-2 pb-5 border-t border-zinc-200 dark:border-zinc-800/70">
+    <form id="send-form" class="flex gap-2">
+      <textarea id="message-input"
+                rows="1"
+                {% if cap_reached %}disabled{% endif %}
+                placeholder="{{ 'Describe the anomaly you\'re investigating…' if ctx.iteration_count == 0 else 'Ask a follow-up question…' }}"
+                class="flex-1 resize-none rounded-xl px-4 py-2.5 text-sm transition-colors
+                       bg-zinc-100 border border-zinc-200 text-zinc-900 placeholder-zinc-400
+                       focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400/30
+                       dark:bg-zinc-800/70 dark:border-zinc-700/60 dark:text-zinc-100 dark:placeholder-zinc-600
+                       dark:focus:border-violet-500/60 dark:focus:ring-violet-500/20
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('send-form').requestSubmit()}">
+      </textarea>
+      <button type="submit"
+              id="send-btn"
+              {% if cap_reached %}disabled{% endif %}
+              class="flex-shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors text-white
+                     bg-violet-600 hover:bg-violet-500 active:bg-violet-700
+                     disabled:opacity-40 disabled:cursor-not-allowed">
+        Send
+      </button>
+    </form>
+  </div>
+
+  <!-- ── Publish modal ───────────────────────────────────────── -->
+  <div x-show="publishing"
+       x-transition:enter="transition-opacity duration-150"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition-opacity duration-100"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+       @click.self="publishing = false"
+       @keydown.escape.window="publishing = false">
+    <div class="w-full max-w-lg mx-4 rounded-xl shadow-2xl p-6
+                bg-white border border-zinc-200
+                dark:bg-zinc-900 dark:border-zinc-700/60">
+      <h2 class="text-sm font-semibold mb-4 text-zinc-800 dark:text-zinc-100">
+        {{ "Republish investigation" if published else "Publish investigation" }}
+      </h2>
+      <div class="mb-5">
+        <label class="block text-xs mb-1.5 text-zinc-500 dark:text-zinc-400">Title</label>
+        <input id="publish-title" type="text"
+               value="{{ metadata.title }}"
+               class="w-full rounded-lg px-3 py-2 text-sm transition-colors
+                      bg-zinc-50 border border-zinc-200 text-zinc-900
+                      focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400/30
+                      dark:bg-zinc-800 dark:border-zinc-700/60 dark:text-zinc-100
+                      dark:focus:border-violet-500/60 dark:focus:ring-violet-500/20">
+      </div>
+      <p class="text-xs mb-5 text-zinc-400 dark:text-zinc-500 leading-relaxed">
+        A document will be generated from the current investigation state and
+        saved to the shared investigations list.
+      </p>
+      <div class="flex items-center justify-end gap-2">
+        <button @click="publishing = false"
+                class="px-3 py-1.5 text-xs transition-colors
+                       text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-100">
+          Cancel
+        </button>
+        <button id="confirm-publish-btn"
+                onclick="publishInvestigation()"
+                class="px-4 py-1.5 text-xs font-medium text-white rounded-md transition-colors
+                       bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700">
+          Confirm &amp; publish
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const CONV_ID = "{{ ctx.id }}";
+  const thread = document.getElementById('message-thread');
+
+  /* Auto-scroll to bottom on load */
+  thread.scrollTop = thread.scrollHeight;
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function appendMessage(role, text) {
+    const isUser = role === 'user';
+    const wrapper = document.createElement('div');
+    wrapper.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+    const bubble = document.createElement('div');
+    bubble.className = `max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+      isUser
+        ? 'bg-violet-100 text-violet-900 rounded-br-sm dark:bg-violet-600/25 dark:text-violet-100'
+        : 'bg-zinc-100 text-zinc-800 rounded-bl-sm dark:bg-zinc-800/80 dark:text-zinc-200'
+    }`;
+    const p = document.createElement('p');
+    p.className = 'whitespace-pre-wrap';
+    p.innerHTML = escapeHtml(text);
+    bubble.appendChild(p);
+    wrapper.appendChild(bubble);
+    thread.appendChild(wrapper);
+    thread.scrollTop = thread.scrollHeight;
+    return wrapper;
+  }
+
+  function setInputDisabled(disabled) {
+    document.getElementById('message-input').disabled = disabled;
+    document.getElementById('send-btn').disabled = disabled;
+  }
+
+  document.getElementById('send-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('message-input');
+    const message = input.value.trim();
+    if (!message) return;
+
+    input.value = '';
+    setInputDisabled(true);
+    appendMessage('user', message);
+
+    /* Typing indicator */
+    const indicator = document.createElement('div');
+    indicator.className = 'flex justify-start';
+    indicator.innerHTML = `
+      <div class="px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm
+                  bg-zinc-100 dark:bg-zinc-800/80">
+        <span class="flex gap-1 items-center text-zinc-400 dark:text-zinc-500">
+          <span class="animate-pulse">Investigating</span>
+          <span class="animate-bounce" style="animation-delay:0ms">.</span>
+          <span class="animate-bounce" style="animation-delay:150ms">.</span>
+          <span class="animate-bounce" style="animation-delay:300ms">.</span>
+        </span>
+      </div>`;
+    thread.appendChild(indicator);
+    thread.scrollTop = thread.scrollHeight;
+
+    try {
+      const resp = await fetch(`/conversations/${CONV_ID}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+      indicator.remove();
+
+      if (resp.ok) {
+        const data = await resp.json();
+        appendMessage('assistant', data.reply);
+        if (data.iteration_count >= 15) {
+          /* Reload to show cap banner, disable input, update iter count */
+          window.location.reload();
+          return;
+        }
+        /* Update iteration counter in header */
+        const counterEl = document.querySelector('header + div p.text-xs');
+        if (counterEl) counterEl.textContent = `${data.iteration_count} / 15 iterations`;
+      } else if (resp.status === 409) {
+        window.location.reload();
+        return;
+      } else {
+        const err = await resp.json().catch(() => ({}));
+        appendMessage('assistant', `Error: ${err?.detail?.message || err?.detail || 'Request failed'}`);
+      }
+    } catch {
+      indicator.remove();
+      appendMessage('assistant', 'Connection error — please try again.');
+    } finally {
+      setInputDisabled(false);
+      document.getElementById('message-input').focus();
+    }
+  });
+
+  async function publishInvestigation() {
+    const title = document.getElementById('publish-title').value.trim();
+    const btn = document.getElementById('confirm-publish-btn');
+    btn.disabled = true;
+    btn.textContent = 'Publishing…';
+
+    try {
+      const resp = await fetch(`/conversations/${CONV_ID}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title || null }),
+      });
+      if (resp.ok) {
+        window.location.reload();
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Confirm & publish';
+        const err = await resp.json().catch(() => ({}));
+        alert(err?.detail?.message || 'Publish failed');
+      }
+    } catch {
+      btn.disabled = false;
+      btn.textContent = 'Confirm & publish';
+      alert('Connection error');
+    }
+  }
+</script>
+{% endblock %}

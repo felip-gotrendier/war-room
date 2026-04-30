@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}war room{% endblock %}
+
+{% block sidebar_items %}
+  {% for conv in conversations %}
+  <a href="/conversations/{{ conv.id }}/view"
+     class="flex flex-col px-2.5 py-2 rounded text-left transition-colors
+            hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
+    <span class="text-xs font-medium truncate text-zinc-700 dark:text-zinc-300">
+      {{ conv.title }}
+    </span>
+    <span class="text-xs mt-0.5 text-zinc-400 dark:text-zinc-600">
+      {{ conv.iteration_count }} iter · {{ conv.last_active_at[:10] }}
+    </span>
+  </a>
+  {% else %}
+  <p class="text-xs px-2.5 py-3 text-zinc-400 dark:text-zinc-700">
+    No investigations yet.
+  </p>
+  {% endfor %}
+{% endblock %}
+
+{% block content %}
+<div class="flex-1 flex items-center justify-center p-8">
+  <div class="text-center max-w-sm">
+    <p class="text-3xl mb-5 select-none">⚔️</p>
+    <h1 class="text-lg font-semibold mb-2 text-zinc-800 dark:text-zinc-100">
+      war room
+    </h1>
+    <p class="text-sm mb-7 text-zinc-500 dark:text-zinc-500 leading-relaxed">
+      Structured data investigations for product anomalies.
+      Start with a question — the system queries pulse, release_agent,
+      and synthesises findings across iterations.
+    </p>
+    <button onclick="createConversation()"
+            class="inline-flex items-center gap-2 px-4 py-2.5
+                   bg-violet-600 hover:bg-violet-500 active:bg-violet-700
+                   text-white text-sm font-medium rounded-md transition-colors">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 4v16m8-8H4"/>
+      </svg>
+      New investigation
+    </button>
+  </div>
+</div>
+{% endblock %}
