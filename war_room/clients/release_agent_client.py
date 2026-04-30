@@ -22,6 +22,21 @@ def _url() -> str:
     return os.environ["RELEASE_AGENT_MCP_URL"]
 
 
+async def ping() -> bool:
+    """Return True if the release-agent MCP server is reachable and responds to initialization.
+
+    Catches all exceptions — including KeyError if RELEASE_AGENT_MCP_URL is not configured —
+    so callers always receive a bool, never a 500.
+    """
+    try:
+        async with streamable_http_client(_url()) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+        return True
+    except Exception:
+        return False
+
+
 async def get_releases(repo: str, date_range: dict) -> WarRoomFinding:
     args = {"repo": repo, "date_range": date_range}
     raw = await _call_with_retry("get_releases", args)

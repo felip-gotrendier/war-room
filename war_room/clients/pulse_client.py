@@ -40,6 +40,21 @@ async def get_recent_anomalies(
     return _parse_anomalies(raw, args)
 
 
+async def ping() -> bool:
+    """Return True if the pulse MCP server is reachable and responds to initialization.
+
+    Catches all exceptions — including KeyError if PULSE_MCP_URL is not configured —
+    so callers always receive a bool, never a 500.
+    """
+    try:
+        async with streamable_http_client(_url()) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+        return True
+    except Exception:
+        return False
+
+
 async def trigger_scan() -> WarRoomFinding:
     triggered_at = datetime.now(timezone.utc).isoformat()
     raw = await _call_with_retry("trigger_scan", {})

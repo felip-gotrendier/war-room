@@ -20,6 +20,7 @@ from api.models import (
     SummarizeResponse,
 )
 from war_room import orchestrator
+from war_room.clients import pulse_client, release_agent_client
 from war_room.conversation_repository import (
     ConversationAccessDenied,
     ConversationNotFound,
@@ -94,6 +95,30 @@ def _require_user(
 @router.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@router.get("/sources/status")
+async def sources_status() -> dict:
+    """Probe both MCP servers and return binary ok/unreachable per source.
+
+    Both pings run concurrently with a 3-second timeout each.
+    This endpoint never raises a 500: ping() catches all exceptions internally,
+    and _timed_ping() additionally catches asyncio.TimeoutError.
+    """
+    async def _timed_ping(coro) -> bool:
+        try:
+            return await asyncio.wait_for(coro, timeout=3.0)
+        except (asyncio.TimeoutError, Exception):
+            return False
+
+    pulse_ok, release_ok = await asyncio.gather(
+        _timed_ping(pulse_client.ping()),
+        _timed_ping(release_agent_client.ping()),
+    )
+    return {
+        "pulse":         "ok" if pulse_ok  else "unreachable",
+        "release_agent": "ok" if release_ok else "unreachable",
+    }
 
 
 @router.post("/conversations", response_model=NewConversationResponse)
