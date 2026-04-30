@@ -108,6 +108,8 @@ function handleSseEvent(type, data) {
       if (data.title) {
         const titleEl = document.querySelector(`[data-conv-id="${CONV_ID}"] .conv-title`);
         if (titleEl) titleEl.textContent = data.title;
+        const headerTitle = document.querySelector('[data-role="conv-header-title"]');
+        if (headerTitle) headerTitle.textContent = data.title;
       }
       break;
     case 'error':

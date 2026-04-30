@@ -131,6 +131,14 @@ def test_stream_endpoint_returns_event_stream(client):
 # ---------------------------------------------------------------------------
 
 
+def test_conversation_view_has_header_title_data_role(client):
+    create_resp = client.post("/conversations", headers={"X-User-Id": "sub-hdr"})
+    conv_id = create_resp.json()["id"]
+    resp = client.get(f"/conversations/{conv_id}/view", headers={"X-User-Id": "sub-hdr"})
+    assert resp.status_code == 200
+    assert 'data-role="conv-header-title"' in resp.text
+
+
 def test_display_messages_filters_skill_prompt():
     from api.ui_routes import _display_messages
 
@@ -185,6 +193,44 @@ def test_display_messages_preserves_order():
 # ---------------------------------------------------------------------------
 # conversation view — skill prompts must not appear in rendered HTML
 # ---------------------------------------------------------------------------
+
+
+def test_display_messages_hides_intermediate_assistant_between_skill_prompts():
+    from api.ui_routes import _display_messages
+
+    msgs = [
+        {"role": "user", "content": "You are source-routing.\n\nWhy did orders drop?"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Sources to query in order: pulse, release_agent"}]},
+        {"role": "user", "content": "You are funnel-investigator.\n\nWhy did orders drop?"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Final finding: orders dropped 12%."}]},
+    ]
+    result = _display_messages(msgs)
+    assert len(result) == 2
+    assert result[0] == {"role": "user", "content": "Why did orders drop?"}
+    final_text = result[1]["content"][0]["text"]
+    assert "Final finding" in final_text
+    assert "Sources to query" not in final_text
+
+
+def test_display_messages_multi_turn_shows_correct_final_replies():
+    from api.ui_routes import _display_messages
+
+    msgs = [
+        {"role": "user", "content": "You are source-routing.\n\nQuestion A"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Plan A (intermediate)"}]},
+        {"role": "user", "content": "You are funnel-investigator.\n\nQuestion A"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Reply A"}]},
+        {"role": "user", "content": "You are source-routing.\n\nQuestion B"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Plan B (intermediate)"}]},
+        {"role": "user", "content": "You are funnel-investigator.\n\nQuestion B"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Reply B"}]},
+    ]
+    result = _display_messages(msgs)
+    assert len(result) == 4
+    assert result[0] == {"role": "user", "content": "Question A"}
+    assert result[1]["content"][0]["text"] == "Reply A"
+    assert result[2] == {"role": "user", "content": "Question B"}
+    assert result[3]["content"][0]["text"] == "Reply B"
 
 
 def test_conversation_view_does_not_render_skill_prompts(client):

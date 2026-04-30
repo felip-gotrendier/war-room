@@ -181,18 +181,21 @@ investigation quality.
 
 ### Phase 2c — Skill prompt display filtering
 
-**Observed behaviour (Phase 2b.2, 2026-04-29):** `ctx.messages` contains raw skill
-prompt messages (`role: user`, content starting with `"You are "`). The conversation
-view must filter these out so PMs see only their own questions and the assistant's
-replies.
+**Observed behaviour (Phase 2b.2, 2026-04-30):** `ctx.messages` contains raw skill
+prompt messages (`role: user`, content starting with `"You are "`) and intermediate
+assistant messages (e.g. source-routing planning text). Both must be hidden from the
+conversation view.
 
-**Current workaround:** `_display_messages()` in `api/ui_routes.py` uses a heuristic:
-user messages starting with `"You are "` are treated as skill prompts; the PM question
-is extracted from the last `\n\n`-delimited section. **Fragility:** if a skill changes
-its prompt header, the heuristic breaks silently and raw skill prompts appear in the view.
+**Current implementation:** `_display_messages()` in `api/ui_routes.py` groups
+messages into PM-turn blocks by extracting the PM question from each skill prompt
+(last `\n\n`-delimited section). Within each block, it shows: (1) the PM question
+once; (2) the last assistant text message (the final reply). All intermediate assistant
+messages and tool_result user messages are hidden. **Fragility:** assumes skill prompts
+start with `"You are "` and embed the PM question as the last section. If either
+convention changes, the filter silently breaks.
 
 **Deferred to Phase 2c.** Robust fix: tag messages at creation time in the orchestrator,
-e.g. `{"role": "user", "content": ..., "_skill_prompt": True}`, and strip `_skill_prompt`
+e.g. `{"role": "user", "content": ..., "_skill_prompt": True}`, and strip tagged
 messages in the display layer without text-matching. Requires a coordinated change to
 `orchestrator.py` and `ui_routes.py`.
 

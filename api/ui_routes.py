@@ -33,25 +33,71 @@ def _message_text(content: Any) -> str:
 
 
 def _display_messages(messages: list[dict]) -> list[dict]:
-    # This heuristic assumes all skill prompts start with "You are ".
-    # If a skill changes its prompt header, this filter breaks silently and raw
-    # skill prompts will appear in the conversation view.
-    # Phase 2c: replace heuristic with explicit message tagging at creation time
-    # in the orchestrator (e.g. a "_display" flag or a separate display list).
-    result = []
-    for msg in messages:
+    # Heuristic assumptions — any of these breaking silently corrupts the view:
+    #   1. Skill prompts start with "You are ".
+    #   2. The PM question is the last \n\n-delimited section of each skill prompt.
+    #   3. All skill prompts within a single PM turn embed the same PM question
+    #      (used to detect turn boundaries between consecutive skill calls).
+    #   4. The last assistant text message in a PM turn block is the final reply.
+    # Phase 2c: replace with explicit message tagging in the orchestrator
+    # (e.g. a "_skill_prompt": True field) instead of text-matching.
+    #
+    # Algorithm: group consecutive skill prompts that share the same extracted PM
+    # question into a single "PM turn block". Within each block, show:
+    #   (1) the PM question once, (2) the last assistant message with text content.
+    # All intermediate assistant messages (e.g. source-routing planning text) and
+    # all tool_result user messages are hidden.
+    result: list[dict] = []
+    n = len(messages)
+    i = 0
+
+    while i < n:
+        msg = messages[i]
+        role = msg.get("role")
         content = msg.get("content")
-        if msg.get("role") == "user":
-            if isinstance(content, list):
-                # tool_result messages — never shown in the chat thread
-                continue
-            if isinstance(content, str) and content.startswith("You are "):
-                # skill prompt — PM question is the last \n\n-delimited section
-                pm_question = content.split("\n\n")[-1].strip()
-                if pm_question:
-                    result.append({"role": "user", "content": pm_question})
-                continue
+
+        if role == "user" and isinstance(content, list):
+            # tool_result — never displayed
+            i += 1
+            continue
+
+        if role == "user" and isinstance(content, str) and content.startswith("You are "):
+            pm_question = content.split("\n\n")[-1].strip()
+
+            # Scan forward to find the end of this PM turn block.
+            # A new PM turn starts when a skill prompt with a DIFFERENT PM question appears.
+            j = i + 1
+            while j < n:
+                m = messages[j]
+                mc = m.get("content")
+                if (
+                    m.get("role") == "user"
+                    and isinstance(mc, str)
+                    and mc.startswith("You are ")
+                    and mc.split("\n\n")[-1].strip() != pm_question
+                ):
+                    break
+                j += 1
+
+            # Within [i, j), keep only the last assistant message that has text.
+            last_asst: dict | None = None
+            for k in range(i, j):
+                if messages[k].get("role") == "assistant":
+                    if _message_text(messages[k].get("content", "")):
+                        last_asst = messages[k]
+
+            if pm_question:
+                result.append({"role": "user", "content": pm_question})
+            if last_asst is not None:
+                result.append(last_asst)
+
+            i = j
+            continue
+
+        # Non-skill-prompt, non-tool-result message — pass through as-is.
         result.append(msg)
+        i += 1
+
     return result
 
 
