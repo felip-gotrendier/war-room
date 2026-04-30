@@ -135,7 +135,7 @@ async def summarize(context: ConversationContext) -> str:
     context.messages.append(investigation_summary.build_message())
     response = await _claude_call(context)
     text = _extract_text(response)
-    context.messages.append({"role": "assistant", "content": response.content})
+    context.messages.append({"role": "assistant", "content": _serialize_content(response.content)})
     return investigation_summary.extract_document(text)
 
 
@@ -154,7 +154,7 @@ async def _run_loop(context: ConversationContext) -> str:
         context.last_active_at = datetime.now(timezone.utc).isoformat()
 
         text = _extract_text(response)
-        context.messages.append({"role": "assistant", "content": response.content})
+        context.messages.append({"role": "assistant", "content": _serialize_content(response.content)})
 
         tool_uses = [b for b in response.content if b.type == "tool_use"]
         if not tool_uses:
@@ -210,7 +210,7 @@ async def _maybe_inject_hypothesis(context: ConversationContext, last_text: str)
             response = await _claude_call(context)
             context.iteration_count += 1
             hyp_text = _extract_text(response)
-            context.messages.append({"role": "assistant", "content": response.content})
+            context.messages.append({"role": "assistant", "content": _serialize_content(response.content)})
             if hypothesis_formation.has_hypothesis(hyp_text):
                 context.current_hypothesis = hypothesis_formation.extract_hypothesis_text(hyp_text)
 
@@ -226,6 +226,17 @@ def _has_repo_gap(context: ConversationContext) -> bool:
                     if "REPO_NOT_FOUND" in c or "not confirmed" in c.lower():
                         return True
     return False
+
+
+def _serialize_content(content: list) -> list[dict]:
+    """Convert SDK content blocks (TextBlock, ToolUseBlock, …) to plain dicts.
+
+    ctx.messages contract is list[dict] throughout the codebase. The Anthropic
+    SDK returns Pydantic model instances; calling .model_dump() normalises them
+    before they enter ctx.messages, so json.dumps() in repo.save() never sees
+    a non-serializable type.
+    """
+    return [b if isinstance(b, dict) else b.model_dump() for b in content]
 
 
 async def _dispatch_tool(name: str, input_args: dict) -> dict:
