@@ -178,127 +178,36 @@
 
 {% block scripts %}
 <script>
+  /* Globals required by stream.js */
   const CONV_ID = "{{ ctx.id }}";
-  const thread = document.getElementById('message-thread');
-
-  /* Auto-scroll to bottom on load */
+  const thread  = document.getElementById('message-thread');
   thread.scrollTop = thread.scrollHeight;
-
-  function escapeHtml(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  function appendMessage(role, text) {
-    const isUser = role === 'user';
-    const wrapper = document.createElement('div');
-    wrapper.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
-    const bubble = document.createElement('div');
-    bubble.className = `max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-      isUser
-        ? 'bg-violet-100 text-violet-900 rounded-br-sm dark:bg-violet-600/25 dark:text-violet-100'
-        : 'bg-zinc-100 text-zinc-800 rounded-bl-sm dark:bg-zinc-800/80 dark:text-zinc-200'
-    }`;
-    const p = document.createElement('p');
-    p.className = 'whitespace-pre-wrap';
-    p.innerHTML = escapeHtml(text);
-    bubble.appendChild(p);
-    wrapper.appendChild(bubble);
-    thread.appendChild(wrapper);
-    thread.scrollTop = thread.scrollHeight;
-    return wrapper;
-  }
-
-  function setInputDisabled(disabled) {
-    document.getElementById('message-input').disabled = disabled;
-    document.getElementById('send-btn').disabled = disabled;
-  }
-
-  document.getElementById('send-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const input = document.getElementById('message-input');
-    const message = input.value.trim();
-    if (!message) return;
-
-    input.value = '';
-    setInputDisabled(true);
-    appendMessage('user', message);
-
-    /* Typing indicator */
-    const indicator = document.createElement('div');
-    indicator.className = 'flex justify-start';
-    indicator.innerHTML = `
-      <div class="px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm
-                  bg-zinc-100 dark:bg-zinc-800/80">
-        <span class="flex gap-1 items-center text-zinc-400 dark:text-zinc-500">
-          <span class="animate-pulse">Investigating</span>
-          <span class="animate-bounce" style="animation-delay:0ms">.</span>
-          <span class="animate-bounce" style="animation-delay:150ms">.</span>
-          <span class="animate-bounce" style="animation-delay:300ms">.</span>
-        </span>
-      </div>`;
-    thread.appendChild(indicator);
-    thread.scrollTop = thread.scrollHeight;
-
-    try {
-      const resp = await fetch(`/conversations/${CONV_ID}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
-      });
-      indicator.remove();
-
-      if (resp.ok) {
-        const data = await resp.json();
-        appendMessage('assistant', data.reply);
-        if (data.iteration_count >= 15) {
-          /* Reload to show cap banner, disable input, update iter count */
-          window.location.reload();
-          return;
-        }
-        /* Update iteration counter in header */
-        const counterEl = document.querySelector('header + div p.text-xs');
-        if (counterEl) counterEl.textContent = `${data.iteration_count} / 15 iterations`;
-      } else if (resp.status === 409) {
-        window.location.reload();
-        return;
-      } else {
-        const err = await resp.json().catch(() => ({}));
-        appendMessage('assistant', `Error: ${err?.detail?.message || err?.detail || 'Request failed'}`);
-      }
-    } catch {
-      indicator.remove();
-      appendMessage('assistant', 'Connection error — please try again.');
-    } finally {
-      setInputDisabled(false);
-      document.getElementById('message-input').focus();
-    }
-  });
 
   async function publishInvestigation() {
     const title = document.getElementById('publish-title').value.trim();
-    const btn = document.getElementById('confirm-publish-btn');
-    btn.disabled = true;
+    const btn   = document.getElementById('confirm-publish-btn');
+    btn.disabled    = true;
     btn.textContent = 'Publishing…';
-
     try {
       const resp = await fetch(`/conversations/${CONV_ID}/publish`, {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title || null }),
+        body:    JSON.stringify({ title: title || null }),
       });
       if (resp.ok) {
         window.location.reload();
       } else {
-        btn.disabled = false;
+        btn.disabled    = false;
         btn.textContent = 'Confirm & publish';
         const err = await resp.json().catch(() => ({}));
         alert(err?.detail?.message || 'Publish failed');
       }
     } catch {
-      btn.disabled = false;
+      btn.disabled    = false;
       btn.textContent = 'Confirm & publish';
       alert('Connection error');
     }
   }
 </script>
+<script src="/static/stream.js"></script>
 {% endblock %}

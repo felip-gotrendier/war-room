@@ -113,6 +113,67 @@ async def test_all_content_blocks_are_dicts_after_turn():
 # ---------------------------------------------------------------------------
 
 
+async def test_event_queue_receives_tool_start_and_complete(repo):
+    """event_queue gets tool_start then tool_complete for each tool call."""
+    import asyncio
+
+    ctx = repo.create(user_id="sub-eq", user_email="user@example.com")
+
+    tool_resp = _fake_message([
+        {"type": "tool_use", "id": "tu_1", "name": "check_metric",
+         "input": {"metric_name": "orders/count", "days": 7}},
+    ])
+    text_resp = _fake_message([{"type": "text", "text": "Done."}])
+
+    call_n = 0
+
+    async def _side(*a, **kw):
+        nonlocal call_n
+        call_n += 1
+        return tool_resp if call_n == 1 else text_resp
+
+    queue: asyncio.Queue = asyncio.Queue()
+
+    with patch.object(orchestrator._client.messages, "create", side_effect=_side):
+        with patch.object(
+            orchestrator, "_dispatch_tool",
+            new=AsyncMock(return_value={
+                "source": "pulse", "tool": "check_metric", "data": {},
+                "coverage": {"requested": "x", "covered": "x",
+                             "is_complete": True, "gaps": [], "freshness_at": None},
+            }),
+        ):
+            _, ctx = await orchestrator.turn(ctx, "test", event_queue=queue)
+
+    events = []
+    while not queue.empty():
+        events.append(await queue.get())
+
+    types = [e["type"] for e in events]
+    assert "tool_start" in types
+    assert "tool_complete" in types
+
+    start_idx    = types.index("tool_start")
+    complete_idx = types.index("tool_complete")
+    assert start_idx < complete_idx, "tool_start must precede tool_complete"
+
+    assert events[start_idx]["tool"]    == "check_metric"
+    assert events[complete_idx]["tool"] == "check_metric"
+
+
+async def test_event_queue_none_does_not_break_turn(repo):
+    """Passing event_queue=None (default) must not change turn behaviour."""
+    ctx = repo.create(user_id="sub-none-eq", user_email="user@example.com")
+    fake_resp = _fake_message([{"type": "text", "text": "OK"}])
+
+    with patch.object(orchestrator._client.messages, "create", new_callable=AsyncMock) as mock:
+        mock.return_value = fake_resp
+        reply, updated = await orchestrator.turn(ctx, "hello")
+
+    assert reply == "OK"
+    assert updated.iteration_count == 1
+
+
 async def test_tool_use_blocks_are_serialisable(repo):
     """ToolUseBlock content from a tool-call response must survive json.dumps."""
     ctx = repo.create(user_id="sub-tool", user_email="user@example.com")

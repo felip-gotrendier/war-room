@@ -80,3 +80,47 @@ def test_conversation_view_unauthenticated_redirects_to_login(client):
     resp = client.get("/conversations/any-id/view")
     assert resp.status_code == 302
     assert "/auth/login" in resp.headers["location"]
+
+
+# ---------------------------------------------------------------------------
+# POST /conversations/{id}/messages/stream  (SSE smoke)
+# ---------------------------------------------------------------------------
+
+
+def test_stream_endpoint_unauthenticated_returns_401(client):
+    create_resp = client.post("/conversations", headers={"X-User-Id": "sub-s"})
+    conv_id = create_resp.json()["id"]
+    resp = client.post(f"/conversations/{conv_id}/messages/stream",
+                       json={"message": "test"})
+    assert resp.status_code == 401
+
+
+def test_stream_endpoint_returns_event_stream(client):
+    from unittest.mock import AsyncMock, patch
+    from anthropic.types import Message
+    from war_room import orchestrator as orch
+
+    create_resp = client.post("/conversations", headers={"X-User-Id": "sub-s"})
+    conv_id = create_resp.json()["id"]
+
+    fake_resp = Message(**{
+        "id": "msg_t", "type": "message", "role": "assistant",
+        "content": [{"type": "text", "text": "Streamed reply"}],
+        "model": "claude-sonnet-4-6", "stop_reason": "end_turn",
+        "stop_sequence": None, "usage": {"input_tokens": 5, "output_tokens": 5},
+    })
+
+    with patch.object(orch._client.messages, "create", new_callable=AsyncMock) as mock:
+        mock.return_value = fake_resp
+        with client.stream(
+            "POST", f"/conversations/{conv_id}/messages/stream",
+            headers={"X-User-Id": "sub-s"},
+            json={"message": "test"},
+        ) as resp:
+            assert resp.status_code == 200
+            assert "text/event-stream" in resp.headers["content-type"]
+            raw = b"".join(resp.iter_bytes()).decode()
+
+    assert "event: text" in raw
+    assert "event: done" in raw
+    assert "Streamed reply" in raw

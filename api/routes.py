@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from sse_starlette.sse import EventSourceResponse
 
 from api.auth_utils import COOKIE_NAME, AuthUser, get_session_user
 from api.models import (
@@ -160,6 +162,72 @@ async def send_message(
         iteration_count=ctx.iteration_count,
         hypothesis=ctx.current_hypothesis,
     )
+
+
+@router.post("/conversations/{id}/messages/stream", response_model=None)
+async def stream_message(
+    id: str,
+    body: MessageRequest,
+    user: AuthUser = Depends(_require_user),
+    repo: ConversationRepository = Depends(_get_repo),
+) -> EventSourceResponse:
+    ctx = _load_or_raise(id, user.user_id, repo)
+
+    if ctx.iteration_count >= 15:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "iteration_cap_reached",
+                "message": (
+                    "This investigation has reached its 15-iteration limit. "
+                    "You can view the current findings, publish the investigation, "
+                    "or open a new conversation to continue."
+                ),
+                "iteration_count": ctx.iteration_count,
+            },
+        )
+
+    was_first_turn = ctx.iteration_count == 0
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def _run() -> None:
+        try:
+            reply, updated = await orchestrator.turn(ctx, body.message, event_queue=queue)
+            if was_first_turn:
+                raw = body.message
+                title = raw[:60].rstrip() + ("…" if len(raw) > 60 else "")
+                repo.update_on_first_turn(updated.id, title=title, original_question=raw)
+            repo.save(updated, user_email=user.user_email)
+            await queue.put({"type": "text", "text": reply})
+            await queue.put({"type": "done", "iteration_count": updated.iteration_count})
+        except IterationCapReached:
+            repo.save(ctx, user_email=user.user_email)
+            await queue.put({
+                "type": "error",
+                "code": "iteration_cap_reached",
+                "iteration_count": ctx.iteration_count,
+            })
+        except Exception as exc:
+            await queue.put({"type": "error", "detail": str(exc)})
+        finally:
+            await queue.put(None)  # sentinel — signals end of stream
+
+    async def _generate():
+        task = asyncio.create_task(_run())
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield {"event": event["type"], "data": json.dumps(event)}
+        except asyncio.CancelledError:
+            task.cancel()
+            raise
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return EventSourceResponse(_generate())
 
 
 @router.get("/conversations/{id}", response_model=ConversationStateResponse)

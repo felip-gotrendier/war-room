@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import uuid
@@ -110,10 +111,12 @@ def create_conversation(user_id: str) -> ConversationContext:
 async def turn(
     context: ConversationContext,
     pm_message: str,
+    event_queue: asyncio.Queue | None = None,
 ) -> tuple[str, ConversationContext]:
     """Process one PM turn and return (assistant_text, updated_context).
 
     Raises IterationCapReached if the cap has been hit.
+    If event_queue is provided, emits tool_start/tool_complete dicts per tool call.
     """
     if context.iteration_count >= 15:
         raise IterationCapReached
@@ -124,7 +127,7 @@ async def turn(
     else:
         context.messages.append({"role": "user", "content": pm_message})
 
-    final_text = await _run_loop(context)
+    final_text = await _run_loop(context, event_queue=event_queue)
 
     context.last_active_at = datetime.now(timezone.utc).isoformat()
     return final_text, context
@@ -143,7 +146,10 @@ async def summarize(context: ConversationContext) -> str:
 # Internal loop
 # ---------------------------------------------------------------------------
 
-async def _run_loop(context: ConversationContext) -> str:
+async def _run_loop(
+    context: ConversationContext,
+    event_queue: asyncio.Queue | None = None,
+) -> str:
     """Run the Claude ↔ tool loop until Claude produces a text-only response."""
     while True:
         if context.iteration_count >= 15:
@@ -165,7 +171,11 @@ async def _run_loop(context: ConversationContext) -> str:
         # Execute all tool calls and collect results
         tool_results_content: list[dict] = []
         for block in tool_uses:
+            if event_queue is not None:
+                await event_queue.put({"type": "tool_start", "tool": block.name})
             result = await _dispatch_tool(block.name, block.input)
+            if event_queue is not None:
+                await event_queue.put({"type": "tool_complete", "tool": block.name})
             tool_results_content.append({
                 "type": "tool_result",
                 "tool_use_id": block.id,

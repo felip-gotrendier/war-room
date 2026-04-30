@@ -153,6 +153,34 @@ MVP validation does not end at Phase 4. It becomes a continuous process of real 
 
 ---
 
+## Deferred decisions and tech debt
+
+### Phase 2c — Tool invocation permission policy
+
+**Observed behaviour (Phase 2b.2, 2026-04-30):** war-room prompts the user
+for confirmation before invoking tools with side effects (e.g. `trigger_scan`).
+For the intended use case — a PM conducting an investigation — this is
+redundant friction: the PM who opens war-room and asks a question has
+implicitly authorised all reads and low-cost writes needed to answer it.
+
+**Deferred to Phase 2c.** Requires:
+1. A new ADR articulating a three-tier invocation policy:
+   - *Read tools* (`check_metric`, `get_recent_anomalies`, `get_releases`,
+     `get_release`, `explain_release`) — invoke automatically, no prompt.
+   - *Cost tools* (`trigger_scan`, future batch operations) — invoke
+     automatically but report cost/latency in the progress indicator.
+   - *Destructive tools* (none currently; any future tool with irreversible
+     external effects) — require explicit confirmation.
+2. Tool metadata field in the MCP contract (e.g. `invocation_policy: auto |
+   cost | destructive`) consumed by the orchestrator.
+3. Orchestrator modification to read the policy field and bypass the default
+   Claude-driven confirmation for `auto` and `cost` tools.
+
+**Workaround:** respond "sí" to the confirmation prompt. Does not degrade
+investigation quality.
+
+---
+
 ## Risk summary
 
 | Phase | Controlled by | Primary risk |
