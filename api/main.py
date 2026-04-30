@@ -17,6 +17,7 @@ from api.auth import router as auth_router
 from api.routes import router
 from war_room.conversation_repository import ConversationRepository
 from war_room.db import get_db_path, init_schema
+from war_room.saved_investigation_repository import SavedInvestigationRepository
 
 
 @asynccontextmanager
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI):
     db_path = get_db_path()
     init_schema(db_path)
     app.state.repo = ConversationRepository(db_path)
+    app.state.saved_inv_repo = SavedInvestigationRepository(db_path)
 
     # OAuth client (ADR-005: Authorization Code + PKCE via authlib)
     oauth = OAuth()

@@ -90,5 +90,15 @@ def init_schema(db_path: str) -> None:
         # executescript issues an implicit COMMIT before running, which is correct
         # for schema init at startup.
         conn.executescript(_SCHEMA)
+        _migrate(conn)
+        conn.commit()
     finally:
         conn.close()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Incremental migrations applied after CREATE TABLE IF NOT EXISTS."""
+    # Phase 2b.2: original_question stores the first user message for publish metadata.
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
+    if "original_question" not in cols:
+        conn.execute("ALTER TABLE conversations ADD COLUMN original_question TEXT")

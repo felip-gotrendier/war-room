@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import json
 import os
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from api.auth_utils import COOKIE_NAME, AuthUser, get_session_user
 from api.models import (
+    ConversationListItem,
     ConversationStateResponse,
+    InvestigationListItem,
     MessageRequest,
     MessageResponse,
     NewConversationResponse,
+    PublishRequest,
+    PublishResponse,
     SummarizeResponse,
 )
 from war_room import orchestrator
@@ -20,6 +25,10 @@ from war_room.conversation_repository import (
 )
 from war_room.db import get_db_path
 from war_room.models import ConversationContext, IterationCapReached
+from war_room.saved_investigation_repository import (
+    SavedInvestigationNotFound,
+    SavedInvestigationRepository,
+)
 
 router = APIRouter()
 
@@ -30,6 +39,10 @@ router = APIRouter()
 
 def _get_repo(request: Request) -> ConversationRepository:
     return request.app.state.repo
+
+
+def _get_saved_inv_repo(request: Request) -> SavedInvestigationRepository:
+    return request.app.state.saved_inv_repo
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +131,8 @@ async def send_message(
             },
         )
 
+    was_first_turn = ctx.iteration_count == 0
+
     try:
         reply, ctx = await orchestrator.turn(ctx, body.message)
     except IterationCapReached:
@@ -133,6 +148,11 @@ async def send_message(
                 "iteration_count": ctx.iteration_count,
             },
         )
+
+    if was_first_turn:
+        raw = body.message
+        title = raw[:60].rstrip() + ("…" if len(raw) > 60 else "")
+        repo.update_on_first_turn(ctx.id, title=title, original_question=raw)
 
     repo.save(ctx, user_email=user.user_email)
     return MessageResponse(
@@ -181,6 +201,93 @@ async def summarize_conversation(
     document = await orchestrator.summarize(ctx)
     repo.save(ctx, user_email=user.user_email)
     return SummarizeResponse(document=document)
+
+
+@router.get("/conversations", response_model=list[ConversationListItem])
+async def list_conversations(
+    user: AuthUser = Depends(_require_user),
+    repo: ConversationRepository = Depends(_get_repo),
+) -> list[ConversationListItem]:
+    rows = repo.list_by_user(user.user_id)
+    return [ConversationListItem(**row) for row in rows]
+
+
+@router.post("/conversations/{id}/publish", response_model=PublishResponse)
+async def publish_conversation(
+    id: str,
+    body: PublishRequest,
+    user: AuthUser = Depends(_require_user),
+    repo: ConversationRepository = Depends(_get_repo),
+    inv_repo: SavedInvestigationRepository = Depends(_get_saved_inv_repo),
+) -> PublishResponse:
+    ctx = _load_or_raise(id, user.user_id, repo)
+    if not ctx.current_hypothesis:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "no_hypothesis",
+                "message": (
+                    "No hypothesis has been formed in this investigation. "
+                    "Continue the investigation before publishing."
+                ),
+            },
+        )
+    metadata = repo.get_metadata(id, user.user_id)
+    document = await orchestrator.summarize(ctx)
+    title = body.title or metadata["title"]
+    result = inv_repo.publish(
+        conversation_id=id,
+        published_by=user.user_id,
+        published_by_email=user.user_email,
+        title=title,
+        document=document,
+        original_question=metadata["original_question"] or "",
+        final_confidence=ctx.current_hypothesis,
+    )
+    repo.save(ctx, user_email=user.user_email)
+    return PublishResponse(
+        id=result["id"],
+        document=result["document"],
+        title=result["title"],
+        published_at=result["published_at"],
+        is_republish=result["is_republish"],
+    )
+
+
+@router.get("/investigations", response_model=list[InvestigationListItem])
+async def list_investigations(
+    user: AuthUser = Depends(_require_user),
+    inv_repo: SavedInvestigationRepository = Depends(_get_saved_inv_repo),
+) -> list[InvestigationListItem]:
+    rows = inv_repo.list_all()
+    return [
+        InvestigationListItem(
+            id=r["id"],
+            conversation_id=r["conversation_id"],
+            title=r["title"],
+            published_by_email=r["published_by_email"],
+            published_at=r["published_at"],
+            original_question=r["original_question"],
+            metrics_mentioned=json.loads(r["metrics_mentioned"]),
+            final_confidence=r["final_confidence"],
+        )
+        for r in rows
+    ]
+
+
+@router.delete("/investigations/{id}", status_code=204)
+async def delete_investigation(
+    id: str,
+    user: AuthUser = Depends(_require_user),
+    inv_repo: SavedInvestigationRepository = Depends(_get_saved_inv_repo),
+) -> None:
+    try:
+        inv = inv_repo.get(id)
+    except SavedInvestigationNotFound:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    if inv["published_by"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Only the publisher can delete this investigation")
+    inv_repo.delete(id)
 
 
 # ---------------------------------------------------------------------------

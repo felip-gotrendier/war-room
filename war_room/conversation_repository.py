@@ -105,6 +105,29 @@ class ConversationRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def update_on_first_turn(self, id: str, title: str, original_question: str) -> None:
+        with db_transaction(self._db_path) as conn:
+            conn.execute(
+                "UPDATE conversations SET title = ?, original_question = ? WHERE id = ?",
+                (title, original_question, id),
+            )
+
+    def get_metadata(self, id: str, user_id: str) -> dict:
+        with db_transaction(self._db_path) as conn:
+            row = conn.execute(
+                "SELECT title, user_email, original_question, user_id FROM conversations WHERE id = ?",
+                (id,),
+            ).fetchone()
+        if row is None:
+            raise ConversationNotFound(id)
+        if row["user_id"] != user_id:
+            raise ConversationAccessDenied(id)
+        return {
+            "title": row["title"],
+            "user_email": row["user_email"],
+            "original_question": row["original_question"],
+        }
+
     def delete(self, id: str, user_id: str) -> None:
         with db_transaction(self._db_path) as conn:
             cursor = conn.execute(

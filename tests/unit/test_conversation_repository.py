@@ -167,6 +167,44 @@ def test_delete_wrong_user_raises(repo):
 
 
 # ---------------------------------------------------------------------------
+# update_on_first_turn
+# ---------------------------------------------------------------------------
+
+
+def test_update_on_first_turn_sets_title_and_original_question(repo):
+    ctx = repo.create(user_id="sub-ft", user_email="ft@example.com")
+    repo.update_on_first_turn(ctx.id, title="My Investigation", original_question="Why did orders drop?")
+
+    meta = repo.get_metadata(ctx.id, "sub-ft")
+    assert meta["title"] == "My Investigation"
+    assert meta["original_question"] == "Why did orders drop?"
+
+
+# ---------------------------------------------------------------------------
+# get_metadata
+# ---------------------------------------------------------------------------
+
+
+def test_get_metadata_returns_expected_fields(repo):
+    ctx = repo.create(user_id="sub-meta", user_email="meta@example.com")
+    meta = repo.get_metadata(ctx.id, "sub-meta")
+    assert meta["user_email"] == "meta@example.com"
+    assert "title" in meta
+    assert "original_question" in meta
+
+
+def test_get_metadata_nonexistent_raises(repo):
+    with pytest.raises(ConversationNotFound):
+        repo.get_metadata("does-not-exist", "sub-meta")
+
+
+def test_get_metadata_wrong_user_raises(repo):
+    ctx = repo.create(user_id="sub-owner", user_email="owner@example.com")
+    with pytest.raises(ConversationAccessDenied):
+        repo.get_metadata(ctx.id, "sub-other")
+
+
+# ---------------------------------------------------------------------------
 # FK CASCADE: deleting a conversation removes its saved_investigation
 # ---------------------------------------------------------------------------
 
