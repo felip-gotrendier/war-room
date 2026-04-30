@@ -3,6 +3,9 @@
  * Requires globals defined in the conversation.html scripts block:
  *   CONV_ID  — conversation UUID
  *   thread   — the #message-thread DOM element
+ *
+ * Optional global: Chart (Chart.js@4 via CDN). If absent, check_metric
+ * cards degrade to compact badges without a chart.
  */
 
 const TOOL_LABELS = {
@@ -34,6 +37,23 @@ const _DEFAULT_STYLE = {
   text:  'text-zinc-500 dark:text-zinc-500',
   label: 'tool',
 };
+
+// Platform → chart line color.
+// TODO: hardcoded for the current GoTrendier platform set. When pulse adds
+// new platforms or rita introduces new sources, update this map. A shared
+// config (served from the API or embedded at template render) would be more
+// maintainable but is premature until the platform list stabilises.
+const PLATFORM_COLORS = {
+  mx_android: 'rgb(20, 184, 166)',
+  mx_ios:     'rgb(59, 130, 246)',
+  co_android: 'rgb(168, 85, 247)',
+  co_ios:     'rgb(249, 115, 22)',
+};
+const _COLOR_CYCLE = [
+  'rgb(20,184,166)', 'rgb(59,130,246)',
+  'rgb(168,85,247)', 'rgb(249,115,22)',
+  'rgb(236,72,153)', 'rgb(132,204,22)',
+];
 
 /* ── DOM helpers ─────────────────────────────────────────────── */
 
@@ -71,32 +91,16 @@ function setInputDisabled(disabled) {
   document.getElementById('send-btn').disabled = disabled;
 }
 
-/* ── Sparkline SVG ───────────────────────────────────────────── */
+/* ── Date formatting ────────────────────────────────────────── */
 
-function renderSparkline(values) {
-  if (!values || values.length < 2) return null;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const W = 48, H = 12;
-  const pts = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * W;
-    const y = H - ((v - min) / range) * (H - 2) - 1;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', W);
-  svg.setAttribute('height', H);
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-  poly.setAttribute('points', pts);
-  poly.setAttribute('fill', 'none');
-  poly.setAttribute('stroke', 'currentColor');
-  poly.setAttribute('stroke-width', '1.5');
-  poly.setAttribute('stroke-linejoin', 'round');
-  poly.setAttribute('stroke-linecap', 'round');
-  svg.appendChild(poly);
-  return svg;
+const _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Parse an ISO date string (YYYY-MM-DD) to "Apr 22" without constructing a
+// Date object. new Date("2026-04-22") is parsed as UTC midnight and
+// toLocaleDateString() would show "Apr 21" in UTC-6 timezones.
+function formatIsoDate(isoDate) {
+  const p = isoDate.split('-');
+  return `${_MONTHS[parseInt(p[1], 10) - 1]} ${parseInt(p[2], 10)}`;
 }
 
 /* ── Tool input summary ──────────────────────────────────────── */
@@ -125,11 +129,12 @@ function showToolBadge(tool, input) {
 
   const card = document.createElement('div');
   card.className = [
-    'inline-flex flex-col gap-0.5 px-3 py-1.5 rounded-lg text-xs border max-w-xs',
+    'inline-flex flex-col gap-1.5 px-3 py-2 rounded-lg text-xs border',
     'bg-zinc-50 border-zinc-200/60 text-zinc-500',
     'dark:bg-zinc-800/40 dark:border-zinc-700/30 dark:text-zinc-500',
   ].join(' ');
 
+  // Main row: dot + label + optional metadata
   const row = document.createElement('div');
   row.className = 'flex items-center gap-2';
 
@@ -150,21 +155,26 @@ function showToolBadge(tool, input) {
     sep.textContent = '·';
     sep.className = 'text-zinc-300 dark:text-zinc-700 select-none';
     const meta = document.createElement('span');
-    meta.className = 'font-mono truncate max-w-[140px]';
+    meta.className = 'font-mono truncate max-w-[200px]';
     meta.textContent = summary;
     row.appendChild(sep);
     row.appendChild(meta);
   }
 
-  const sparklineSlot = document.createElement('span');
-  sparklineSlot.setAttribute('data-role', 'tool-sparkline');
-  row.appendChild(sparklineSlot);
+  // Chart container — separate block below main row, hidden until tool_complete
+  const chartContainer = document.createElement('div');
+  chartContainer.setAttribute('data-role', 'tool-chart');
+  chartContainer.className = 'hidden';
+  chartContainer.style.height = '200px';
+  chartContainer.style.position = 'relative'; // required by Chart.js responsive mode
 
+  // Gap row — hidden until tool_complete with coverage gap
   const gapRow = document.createElement('div');
   gapRow.setAttribute('data-role', 'tool-gap');
   gapRow.className = 'hidden pl-3.5 truncate text-amber-600 dark:text-amber-400';
 
   card.appendChild(row);
+  card.appendChild(chartContainer);
   card.appendChild(gapRow);
   wrapper.appendChild(card);
   thread.appendChild(wrapper);
@@ -181,7 +191,7 @@ function completeToolBadge(tool, data) {
   const card = wrapper.firstElementChild;
   const dot = card.querySelector('[data-role="tool-dot"]');
   const label = card.querySelector('[data-role="tool-label"]');
-  const sparklineSlot = card.querySelector('[data-role="tool-sparkline"]');
+  const chartContainer = card.querySelector('[data-role="tool-chart"]');
   const gapRow = card.querySelector('[data-role="tool-gap"]');
 
   const source = data && data.source;
@@ -190,28 +200,87 @@ function completeToolBadge(tool, data) {
   const hasGap = !coverage.is_complete && coverage.gaps && coverage.gaps.length > 0;
   const style = SOURCE_STYLES[source] || _DEFAULT_STYLE;
 
+  // Stop pulse animation, update dot color
   if (dot) {
     dot.className = `w-1.5 h-1.5 rounded-full flex-shrink-0 ${hasGap ? 'bg-amber-400' : 'bg-emerald-400'}`;
   }
 
+  // Update label to source name with source color
   if (label && source) {
     label.textContent = style.label;
     label.className = `font-medium ${style.text}`;
   }
 
-  if (sparklineSlot && uiData.sparkline && uiData.sparkline.length >= 2) {
-    const svg = renderSparkline(uiData.sparkline);
-    if (svg) {
-      svg.className = `flex-shrink-0 opacity-60 ${style.text}`;
-      sparklineSlot.appendChild(svg);
-    }
-  }
+  // Chart for check_metric — only if platforms data is present and Chart.js loaded
+  // Color detection happens at render time: charts already in the DOM will not
+  // automatically update on theme toggle.
+  // TODO (C5): when implementing the dark/light toggle, also destroy and recreate
+  // active Chart instances so grid and tick colors stay in sync with the theme.
+  const platforms = uiData.platforms;
+  if (chartContainer && platforms && platforms.length > 0 && typeof Chart !== 'undefined') {
+    card.style.width = '420px';
+    chartContainer.classList.remove('hidden');
 
+    const canvas = document.createElement('canvas');
+    chartContainer.appendChild(canvas);
+
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+    const tickColor = isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.40)';
+
+    // Use the first platform's dates as shared x-axis labels
+    const labels = (platforms[0].series || []).map(s => formatIsoDate(s.date));
+
+    const datasets = platforms.map((p, i) => {
+      const color = PLATFORM_COLORS[p.platform] || _COLOR_CYCLE[i % _COLOR_CYCLE.length];
+      return {
+        label: p.platform,
+        data: (p.series || []).map(s => s.value),
+        borderColor: color,
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.3,
+      };
+    });
+
+    new Chart(canvas, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        scales: {
+          x: {
+            grid:  { color: gridColor },
+            ticks: { color: tickColor, maxTicksLimit: 7, font: { size: 10 } },
+          },
+          y: {
+            grid:  { color: gridColor },
+            ticks: { color: tickColor, maxTicksLimit: 5, font: { size: 10 } },
+          },
+        },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: tickColor, boxWidth: 10, padding: 8, font: { size: 10 } },
+          },
+          tooltip: { mode: 'index', intersect: false },
+        },
+      },
+    });
+  }
+  // If Chart is undefined (CDN unreachable): chartContainer stays hidden,
+  // card remains compact — no JS error, no empty whitespace.
+
+  // Coverage gap row
   if (gapRow && hasGap) {
     gapRow.textContent = `⚠ ${coverage.gaps[0]}`;
     gapRow.classList.remove('hidden');
   }
 
+  // Update card border color for source
   if (source && SOURCE_STYLES[source]) {
     card.className = card.className
       .replace('border-zinc-200/60 dark:border-zinc-700/30', style.ring);

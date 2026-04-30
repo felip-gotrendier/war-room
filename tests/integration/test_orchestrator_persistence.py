@@ -164,7 +164,7 @@ async def test_event_queue_receives_tool_start_and_complete(repo):
     assert events[complete_idx]["source"] == "pulse"
     assert events[complete_idx]["coverage"]["is_complete"] is True
     assert events[complete_idx]["coverage"]["gaps"] == []
-    assert "ui_data" in events[complete_idx]
+    assert events[complete_idx]["ui_data"] == {"metric": "", "platforms": []}
 
 
 async def test_event_queue_none_does_not_break_turn(repo):

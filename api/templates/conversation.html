@@ -180,6 +180,10 @@
 {% endblock %}
 
 {% block scripts %}
+{# Chart.js loaded only on conversation pages — not on landing or other routes. #}
+{# jsdelivr CDN, pinned to major version 4. If CDN is unavailable, stream.js   #}
+{# guards with typeof Chart !== 'undefined' and degrades to a compact card.    #}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
   /* Globals required by stream.js */
   const CONV_ID = "{{ ctx.id }}";

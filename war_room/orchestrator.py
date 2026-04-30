@@ -251,17 +251,16 @@ def _compact_ui_data(tool_name: str, result: dict) -> dict:
     """Extract minimal display data from a tool result for the SSE tool_complete event."""
     data = result.get("data", {})
     if tool_name == "check_metric":
-        platforms = data.get("platforms", [])
-        if platforms:
-            # Use the first platform as a representative sparkline.
-            # Multi-platform display would clutter the card (β tradeoff).
-            # If a platform-specific anomaly matters, the assistant text will call it out.
-            series = platforms[0].get("series", [])
-            return {
-                "metric": data.get("metric", ""),
-                "sparkline": [p["value"] for p in series],
-            }
-        return {"metric": data.get("metric", ""), "sparkline": []}
+        return {
+            "metric": data.get("metric", ""),
+            "platforms": [
+                {
+                    "platform": p.get("platform", ""),
+                    "series": [{"date": s["date"], "value": s["value"]} for s in p.get("series", [])],
+                }
+                for p in data.get("platforms", [])
+            ],
+        }
     if tool_name == "get_recent_anomalies":
         return {"anomaly_count": len(data.get("anomalies", []))}
     if tool_name == "get_releases":
