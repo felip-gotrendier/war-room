@@ -32,6 +32,29 @@ def _message_text(content: Any) -> str:
     return ""
 
 
+def _display_messages(messages: list[dict]) -> list[dict]:
+    # This heuristic assumes all skill prompts start with "You are ".
+    # If a skill changes its prompt header, this filter breaks silently and raw
+    # skill prompts will appear in the conversation view.
+    # Phase 2c: replace heuristic with explicit message tagging at creation time
+    # in the orchestrator (e.g. a "_display" flag or a separate display list).
+    result = []
+    for msg in messages:
+        content = msg.get("content")
+        if msg.get("role") == "user":
+            if isinstance(content, list):
+                # tool_result messages — never shown in the chat thread
+                continue
+            if isinstance(content, str) and content.startswith("You are "):
+                # skill prompt — PM question is the last \n\n-delimited section
+                pm_question = content.split("\n\n")[-1].strip()
+                if pm_question:
+                    result.append({"role": "user", "content": pm_question})
+                continue
+        result.append(msg)
+    return result
+
+
 templates.env.filters["message_text"] = _message_text
 
 
@@ -96,5 +119,6 @@ async def conversation_view(
             "conversations": conversations,
             "published": published,
             "cap_reached": ctx.iteration_count >= 15,
+            "display_messages": _display_messages(ctx.messages),
         },
     )

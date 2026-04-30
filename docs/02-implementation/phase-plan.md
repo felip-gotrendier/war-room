@@ -179,6 +179,23 @@ implicitly authorised all reads and low-cost writes needed to answer it.
 **Workaround:** respond "sí" to the confirmation prompt. Does not degrade
 investigation quality.
 
+### Phase 2c — Skill prompt display filtering
+
+**Observed behaviour (Phase 2b.2, 2026-04-29):** `ctx.messages` contains raw skill
+prompt messages (`role: user`, content starting with `"You are "`). The conversation
+view must filter these out so PMs see only their own questions and the assistant's
+replies.
+
+**Current workaround:** `_display_messages()` in `api/ui_routes.py` uses a heuristic:
+user messages starting with `"You are "` are treated as skill prompts; the PM question
+is extracted from the last `\n\n`-delimited section. **Fragility:** if a skill changes
+its prompt header, the heuristic breaks silently and raw skill prompts appear in the view.
+
+**Deferred to Phase 2c.** Robust fix: tag messages at creation time in the orchestrator,
+e.g. `{"role": "user", "content": ..., "_skill_prompt": True}`, and strip `_skill_prompt`
+messages in the display layer without text-matching. Requires a coordinated change to
+`orchestrator.py` and `ui_routes.py`.
+
 ---
 
 ## Risk summary

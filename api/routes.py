@@ -199,7 +199,10 @@ async def stream_message(
                 repo.update_on_first_turn(updated.id, title=title, original_question=raw)
             repo.save(updated, user_email=user.user_email)
             await queue.put({"type": "text", "text": reply})
-            await queue.put({"type": "done", "iteration_count": updated.iteration_count})
+            done_event: dict = {"type": "done", "iteration_count": updated.iteration_count}
+            if was_first_turn:
+                done_event["title"] = title
+            await queue.put(done_event)
         except IterationCapReached:
             repo.save(ctx, user_email=user.user_email)
             await queue.put({

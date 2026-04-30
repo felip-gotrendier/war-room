@@ -124,3 +124,92 @@ def test_stream_endpoint_returns_event_stream(client):
     assert "event: text" in raw
     assert "event: done" in raw
     assert "Streamed reply" in raw
+
+
+# ---------------------------------------------------------------------------
+# _display_messages() unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_display_messages_filters_skill_prompt():
+    from api.ui_routes import _display_messages
+
+    msgs = [{"role": "user", "content": "You are a funnel investigator.\n\nWhy did orders drop?"}]
+    result = _display_messages(msgs)
+    assert result == [{"role": "user", "content": "Why did orders drop?"}]
+
+
+def test_display_messages_drops_tool_result():
+    from api.ui_routes import _display_messages
+
+    msgs = [{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "x", "content": "{}"}]}]
+    result = _display_messages(msgs)
+    assert result == []
+
+
+def test_display_messages_keeps_assistant_message():
+    from api.ui_routes import _display_messages
+
+    msgs = [{"role": "assistant", "content": [{"type": "text", "text": "Here's the analysis."}]}]
+    result = _display_messages(msgs)
+    assert result == msgs
+
+
+def test_display_messages_drops_skill_prompt_with_empty_question():
+    from api.ui_routes import _display_messages
+
+    # Skill prompt with no actual question (edge case)
+    msgs = [{"role": "user", "content": "You are an investigator.\n\n"}]
+    result = _display_messages(msgs)
+    assert result == []
+
+
+def test_display_messages_preserves_order():
+    from api.ui_routes import _display_messages
+
+    msgs = [
+        {"role": "user", "content": "You are a router.\n\nFirst question"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Answer one"}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "{}"}]},
+        {"role": "user", "content": "You are a router.\n\nSecond question"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Answer two"}]},
+    ]
+    result = _display_messages(msgs)
+    assert len(result) == 4
+    assert result[0] == {"role": "user", "content": "First question"}
+    assert result[1]["role"] == "assistant"
+    assert result[2] == {"role": "user", "content": "Second question"}
+    assert result[3]["role"] == "assistant"
+
+
+# ---------------------------------------------------------------------------
+# conversation view — skill prompts must not appear in rendered HTML
+# ---------------------------------------------------------------------------
+
+
+def test_conversation_view_does_not_render_skill_prompts(client):
+    from unittest.mock import AsyncMock, patch
+    from anthropic.types import Message
+    from war_room import orchestrator as orch
+
+    create_resp = client.post("/conversations", headers={"X-User-Id": "sub-sp"})
+    conv_id = create_resp.json()["id"]
+
+    fake_resp = Message(**{
+        "id": "msg_sp", "type": "message", "role": "assistant",
+        "content": [{"type": "text", "text": "Here is my analysis."}],
+        "model": "claude-sonnet-4-6", "stop_reason": "end_turn",
+        "stop_sequence": None, "usage": {"input_tokens": 5, "output_tokens": 5},
+    })
+
+    with patch.object(orch._client.messages, "create", new_callable=AsyncMock) as mock:
+        mock.return_value = fake_resp
+        client.post(
+            f"/conversations/{conv_id}/messages/stream",
+            headers={"X-User-Id": "sub-sp"},
+            json={"message": "Why did orders drop?"},
+        )
+
+    resp = client.get(f"/conversations/{conv_id}/view", headers={"X-User-Id": "sub-sp"})
+    assert resp.status_code == 200
+    assert "You are " not in resp.text

@@ -5,13 +5,14 @@
 {% block sidebar_items %}
   {% for conv in conversations %}
   <a href="/conversations/{{ conv.id }}/view"
+     data-conv-id="{{ conv.id }}"
      class="flex flex-col px-2.5 py-2 rounded text-left transition-colors
             {% if conv.id == ctx.id %}
               bg-zinc-200 dark:bg-zinc-800/80
             {% else %}
               hover:bg-zinc-100 dark:hover:bg-zinc-800/60
             {% endif %}">
-    <span class="text-xs font-medium truncate
+    <span class="conv-title text-xs font-medium truncate
                  {% if conv.id == ctx.id %}text-zinc-900 dark:text-zinc-100
                  {% else %}text-zinc-600 dark:text-zinc-300{% endif %}">
       {{ conv.title }}
@@ -37,7 +38,8 @@
       <h1 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
         {{ metadata.title }}
       </h1>
-      <p class="text-xs mt-0.5 text-zinc-400 dark:text-zinc-500">
+      <p class="text-xs mt-0.5 text-zinc-400 dark:text-zinc-500"
+         data-role="iter-counter">
         {{ ctx.iteration_count }} / 15 iterations
         {% if published %} · <span class="text-emerald-600 dark:text-emerald-500">published</span>{% endif %}
       </p>
@@ -54,7 +56,7 @@
   <!-- ── Message thread ──────────────────────────────────────── -->
   <div id="message-thread"
        class="flex-1 overflow-y-auto px-6 py-5 space-y-4 scroll-smooth">
-    {% for msg in ctx.messages %}
+    {% for msg in display_messages %}
       {% set text = msg.content | message_text %}
       {% if text and msg.role in ('user', 'assistant') %}
       <div class="flex {{ 'justify-end' if msg.role == 'user' else 'justify-start' }}">

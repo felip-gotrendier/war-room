@@ -102,7 +102,13 @@ function handleSseEvent(type, data) {
       appendMessage('assistant', data.text);
       break;
     case 'done':
-      if (data.iteration_count >= 15) { window.location.reload(); }
+      if (data.iteration_count >= 15) { window.location.reload(); return; }
+      const counter = document.querySelector('[data-role="iter-counter"]');
+      if (counter) counter.textContent = `${data.iteration_count} / 15 iterations`;
+      if (data.title) {
+        const titleEl = document.querySelector(`[data-conv-id="${CONV_ID}"] .conv-title`);
+        if (titleEl) titleEl.textContent = data.title;
+      }
       break;
     case 'error':
       if (data.code === 'iteration_cap_reached') { window.location.reload(); return; }
