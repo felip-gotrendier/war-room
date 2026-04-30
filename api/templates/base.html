@@ -55,13 +55,18 @@
     </div>
 
     <div class="flex items-center gap-5 text-xs">
-      <!-- Source status indicators -->
+      <!-- Source status indicators.
+           Dots start neutral grey and are updated by the fetch below once the
+           page loads. If the fetch fails entirely (war-room unreachable from
+           the browser), dots stay grey — not red, not green. -->
       <div class="flex items-center gap-3 text-zinc-400 dark:text-zinc-500">
         <span class="flex items-center gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>pulse
+          <span id="status-dot-pulse"
+                class="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>pulse
         </span>
         <span class="flex items-center gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>release_agent
+          <span id="status-dot-release-agent"
+                class="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>release_agent
         </span>
         <span class="text-zinc-300 dark:text-zinc-700">rita — soon</span>
       </div>
@@ -132,6 +137,28 @@
         window.location.href = `/conversations/${data.id}/view`;
       }
     }
+  </script>
+  <script>
+    /* Update source status dots once at page load.
+     * Must run after the status dot elements exist in the DOM (script is at end
+     * of body — do not move to <head> or getElementById calls will return null).
+     * On fetch error (war-room unreachable from browser), catch silences the
+     * error and dots remain neutral grey — no false positive in either direction. */
+    (async () => {
+      try {
+        const resp = await fetch('/sources/status');
+        if (!resp.ok) return;
+        const s = await resp.json();
+        const set = (id, status) => {
+          const el = document.getElementById(id);
+          if (el) el.className = `w-1.5 h-1.5 rounded-full ${
+            status === 'ok' ? 'bg-emerald-500' : 'bg-red-400'
+          }`;
+        };
+        set('status-dot-pulse',         s.pulse);
+        set('status-dot-release-agent', s.release_agent);
+      } catch {}
+    })();
   </script>
   {% block scripts %}{% endblock %}
 </body>

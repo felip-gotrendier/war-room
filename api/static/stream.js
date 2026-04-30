@@ -122,6 +122,12 @@ function toolInputSummary(tool, input) {
 const _activeBadges = {};
 let _synthBadge = null;
 
+// _chartRegistry: Map<canvas → {chartInstance, platforms}>
+// No cleanup today — tool cards are never removed from the DOM in normal use.
+// If cards become removable (expected in C6 — Save & Publish sidebar), add
+// registry cleanup here to avoid memory leaks.
+const _chartRegistry = new Map();
+
 function showToolBadge(tool, input) {
   const summary = toolInputSummary(tool, input);
 
@@ -215,11 +221,51 @@ function hideSynthesizing() {
   if (_synthBadge) { _synthBadge.remove(); _synthBadge = null; }
 }
 
+/* Create a Chart.js line chart on canvas for the given platforms data.
+ * Reads isDark at call time, so re-calling after a theme toggle picks up
+ * updated grid/tick colors automatically.
+ */
+function _createChart(canvas, platforms) {
+  const isDark   = document.documentElement.classList.contains('dark');
+  const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+  const tickColor = isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.40)';
+
+  const labels = (platforms[0].series || []).map(s => formatIsoDate(s.date));
+  const datasets = platforms.map((p, i) => {
+    const color = PLATFORM_COLORS[p.platform] || _COLOR_CYCLE[i % _COLOR_CYCLE.length];
+    return {
+      label:           p.platform,
+      data:            (p.series || []).map(s => s.value),
+      borderColor:     color,
+      backgroundColor: 'transparent',
+      borderWidth:     1.5,
+      pointRadius:     0,
+      tension:         0.3,
+    };
+  });
+
+  return new Chart(canvas, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      scales: {
+        x: { grid: { color: gridColor }, ticks: { color: tickColor, maxTicksLimit: 7, font: { size: 10 } } },
+        y: { grid: { color: gridColor }, ticks: { color: tickColor, maxTicksLimit: 5, font: { size: 10 } } },
+      },
+      plugins: {
+        legend:  { position: 'bottom', labels: { color: tickColor, boxWidth: 10, padding: 8, font: { size: 10 } } },
+        tooltip: { mode: 'index', intersect: false },
+      },
+    },
+  });
+}
+
 /* Apply completion state to a tool card wrapper.
  * Used by both completeToolBadge (live SSE) and the DOMContentLoaded static-card
  * initializer (persisted view) — same code path guarantees coherence by construction.
- * TODO (C5): on dark/light toggle, destroy and recreate Chart instances so grid
- * and tick colors stay in sync with the theme.
  */
 function _applyCompletedState(wrapper, tool, source, uiData, coverage) {
   const card = wrapper.firstElementChild;
@@ -251,51 +297,8 @@ function _applyCompletedState(wrapper, tool, source, uiData, coverage) {
     const canvas = document.createElement('canvas');
     chartContainer.appendChild(canvas);
 
-    const isDark = document.documentElement.classList.contains('dark');
-    const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
-    const tickColor = isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.40)';
-
-    const labels = (platforms[0].series || []).map(s => formatIsoDate(s.date));
-
-    const datasets = platforms.map((p, i) => {
-      const color = PLATFORM_COLORS[p.platform] || _COLOR_CYCLE[i % _COLOR_CYCLE.length];
-      return {
-        label: p.platform,
-        data: (p.series || []).map(s => s.value),
-        borderColor: color,
-        backgroundColor: 'transparent',
-        borderWidth: 1.5,
-        pointRadius: 0,
-        tension: 0.3,
-      };
-    });
-
-    new Chart(canvas, {
-      type: 'line',
-      data: { labels, datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        scales: {
-          x: {
-            grid:  { color: gridColor },
-            ticks: { color: tickColor, maxTicksLimit: 7, font: { size: 10 } },
-          },
-          y: {
-            grid:  { color: gridColor },
-            ticks: { color: tickColor, maxTicksLimit: 5, font: { size: 10 } },
-          },
-        },
-        plugins: {
-          legend: {
-            position: 'bottom',
-            labels: { color: tickColor, boxWidth: 10, padding: 8, font: { size: 10 } },
-          },
-          tooltip: { mode: 'index', intersect: false },
-        },
-      },
-    });
+    const chartInstance = _createChart(canvas, platforms);
+    _chartRegistry.set(canvas, { chartInstance, platforms });
   }
 
   if (gapRow && hasGap) {
@@ -373,6 +376,16 @@ document.addEventListener('DOMContentLoaded', () => {
     try { coverage = JSON.parse(wrapper.dataset.coverage || '{}'); } catch {}
     _applyCompletedState(wrapper, tool, source, uiData, coverage);
   });
+
+  /* Re-render all Chart instances when the dark/light theme toggles.
+   * _createChart reads isDark at call time, so recreating picks up the new
+   * colors automatically. Alpine.js toggles the 'dark' class on <html>. */
+  new MutationObserver(() => {
+    for (const [canvas, entry] of _chartRegistry) {
+      entry.chartInstance.destroy();
+      entry.chartInstance = _createChart(canvas, entry.platforms);
+    }
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
   const form = document.getElementById('send-form');
   if (!form) return;
