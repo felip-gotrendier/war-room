@@ -37,6 +37,8 @@ async def callback(request: Request) -> RedirectResponse:
 
     # Secure flag defaults to False for local dev; set COOKIE_SECURE=true in production.
     secure = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+    # Redirect to "/" after successful OAuth. There is no landing page yet —
+    # users will see a 404 here until the UI is implemented in Phase 2b.2.
     response = RedirectResponse(url="/")
     response.set_cookie(
         key=COOKIE_NAME,

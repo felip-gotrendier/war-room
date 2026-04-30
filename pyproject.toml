@@ -10,6 +10,7 @@ dependencies = [
     "mcp>=1.27.0",
     "python-dotenv>=1.0.0",
     "authlib>=1.7.0",
+    "itsdangerous>=2.0.0",
 ]
 
 [project.optional-dependencies]
