@@ -218,7 +218,7 @@ messages in the display layer without text-matching. Requires a coordinated chan
 
 ## Phase 2b.2 — C5: header polish and source status indicators
 
-**Status**: active implementation (2026-04-30).
+**Status**: closed 2026-04-30. Backend (ping + `/sources/status`), frontend (status dots + chart re-render), tests (3 unit tests for the endpoint), and empirical verification on Felip's Mac all complete.
 
 ### α — Chart re-render on dark/light theme toggle
 
