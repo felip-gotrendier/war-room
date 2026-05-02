@@ -269,7 +269,7 @@ of whether the MCP servers are reachable.
 
 ## Phase 2b.2 — C6: Save & Publish flow
 
-**Status**: active implementation (2026-05-02).
+**Status**: closed 2026-05-02. All five execution steps complete; empirical verification on Felip's Mac passed all six scenario steps.
 
 ### Scope
 
@@ -319,10 +319,13 @@ thread + sidebar) coexist correctly.
 The `MutationObserver` iterates the full registry: sidebar charts are destroyed
 and recreated on dark/light toggle along with main-thread charts.
 
-**Known sizing risk**: `x-show` hides with `display: none`. Sidebar charts are
-initialised at `DOMContentLoaded` with 0-width parent. Chart.js@4's `ResizeObserver`
-fires when Alpine restores `display` → charts resize before the slide-in
-transition completes in practice. Verify empirically on first open.
+**Known sizing risk** (resolved empirically 2026-05-02): `x-show` hides with
+`display: none`. Sidebar charts are initialised at `DOMContentLoaded` with
+0-width parent. Chart.js@4's `ResizeObserver` fires when Alpine restores
+`display` → charts resize before the slide-in transition completes in practice.
+Verified on Felip's Mac: charts rendered correctly on first open with no
+blank/zero-size canvases. ResizeObserver is sufficient; no explicit resize
+call on sidebar open is needed.
 
 **Double-submit guard**: `publishInvestigation()` already disables the confirm
 button and sets text to "Publishing…" on click (re-enabled on error paths).
