@@ -267,6 +267,79 @@ of whether the MCP servers are reachable.
 
 ---
 
+## Phase 2b.2 — C6: Save & Publish flow
+
+**Status**: active implementation (2026-05-02).
+
+### Scope
+
+Full Save & Publish UI. The backend (SavedInvestigationRepository, `POST
+/conversations/{id}/publish`, `GET /investigations`, `DELETE /investigations/{id}`)
+was built in C1. C6 wires the UI around it.
+
+### Decisions (2026-05-02)
+
+**Publish button**: already exists in `conversation.html` header; shown when
+`ctx.current_hypothesis` is set. Currently opens a centred modal. C6 replaces
+the modal with a right-panel slide-in sidebar.
+
+**Sidebar layout**: Opció A — in-situ evolution of `x-data="{ publishing: false }"`
+already on the outermost div of `conversation.html`. Width ~600px. Positioned
+`absolute right-0 top-0 bottom-0` inside the `relative` parent. `x-transition`
+translate-x (not opacity). Overlays the message thread.
+
+**Preview content**: full conversation rendered inside the sidebar — same
+`display_messages` loop used for the main thread (static HTML, server-rendered).
+Includes tool cards (dot + label + chart if applicable). No filtering or
+summarisation. If proved too long in practice, evolve later.
+The hypothesis is NOT repeated separately at the end of the sidebar preview:
+`display_messages` already contains it as the final assistant message. A
+separate hypothesis block would duplicate content and risk visual divergence.
+
+**Title field**: single editable field. Pre-filled from `saved_investigation.title`
+if a prior publish exists, from `conversations.title` otherwise. No new DB column
+or migration required — the implicit persistence through `saved_investigation.title`
+achieves the desired "manual title survives republish" behaviour.
+
+**Title edit on close**: if the user edits the title field and then closes the
+sidebar (× button or backdrop click) without publishing, the edit is lost.
+Accepted behaviour — title is persisted only on publish (implicit model). Not
+a bug; a future reader should not interpret this as missing persistence logic.
+
+**`/investigations` page**: new template + UI route (`GET /investigations/view`).
+Link added to base.html header. Shows all saved investigations (title, author,
+date, metrics) with per-row delete.
+
+### Chart registry behaviour in sidebar (verified 2026-05-02)
+
+`_chartRegistry` keys are canvas DOM elements; each `_applyCompletedState` call
+creates a fresh canvas → unique key. Multiple canvases in the same page (main
+thread + sidebar) coexist correctly.
+
+The `MutationObserver` iterates the full registry: sidebar charts are destroyed
+and recreated on dark/light toggle along with main-thread charts.
+
+**Known sizing risk**: `x-show` hides with `display: none`. Sidebar charts are
+initialised at `DOMContentLoaded` with 0-width parent. Chart.js@4's `ResizeObserver`
+fires when Alpine restores `display` → charts resize before the slide-in
+transition completes in practice. Verify empirically on first open.
+
+**Double-submit guard**: `publishInvestigation()` already disables the confirm
+button and sets text to "Publishing…" on click (re-enabled on error paths).
+No change needed.
+
+### Execution order
+
+1. `docs/02-implementation/phase-plan.md` — this entry (commit)
+2. `conversation.html` — modal → slide-in sidebar with preview + title edit
+3. `base.html` — add "Investigations" link to header
+4. `api/ui_routes.py` + `api/templates/investigations.html` — new route + template
+5. Tests — smoke tests for new UI routes
+
+Diff approval before each commit.
+
+---
+
 ## Risk summary
 
 | Phase | Controlled by | Primary risk |
