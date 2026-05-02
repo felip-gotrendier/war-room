@@ -131,6 +131,29 @@ def test_stream_endpoint_returns_event_stream(client):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# GET /investigations/view
+# ---------------------------------------------------------------------------
+
+
+def test_investigations_view_unauthenticated_redirects_to_login(client):
+    resp = client.get("/investigations/view")
+    assert resp.status_code == 302
+    assert "/auth/login" in resp.headers["location"]
+
+
+def test_investigations_view_with_mock_auth_returns_html(client):
+    resp = client.get("/investigations/view", headers={"X-User-Id": "sub-smoke"})
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "Saved investigations" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# _display_messages() unit tests
+# ---------------------------------------------------------------------------
+
+
 def test_conversation_view_has_header_title_data_role(client):
     create_resp = client.post("/conversations", headers={"X-User-Id": "sub-hdr"})
     conv_id = create_resp.json()["id"]
