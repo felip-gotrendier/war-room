@@ -216,6 +216,32 @@ messages in the display layer without text-matching. Requires a coordinated chan
 
 ---
 
+## Phase 2b.2 — Web UI (complete)
+
+**Status**: closed 2026-05-02. All six cycles complete; empirical verification
+on Felip's Mac passed for each. Branch `phase-2b.2-web-ui` merged to `main`.
+
+| Cycle | Scope | Closed |
+|-------|-------|--------|
+| C1 | `SavedInvestigationRepository`; `POST /conversations/{id}/publish`, `GET /investigations`, `DELETE /investigations/{id}` API routes | 2026-04-30 |
+| C2 | UI routes (`GET /`, `GET /conversations/{id}/view`); `base.html`, `landing.html`, `conversation.html` templates; Alpine.js + Tailwind layout | 2026-04-30 |
+| C3 | SSE streaming; orchestrator `event_queue`; live tool cards in the browser | 2026-04-30 |
+| C4 | Rich tool cards (Chart.js sparklines, coverage gap warnings, hypothesis card); live/persisted card parity; `synthesizing` indicator; `attr_json` double-escaping fix | 2026-04-30 |
+| C5 | Source status dots (real MCP ping via `GET /sources/status`); Chart.js theme re-render on dark/light toggle | 2026-04-30 |
+| C6 | Publish sidebar slide-in with conversation preview; `/investigations` page; `_sidebar_items.html` partial; `metrics_mentioned` parse moved to repository | 2026-05-02 |
+
+**Tech debt deferred to Phase 2c** (documented in detail above):
+- Tool invocation permission policy (three-tier: auto / cost / destructive)
+- `tool_start` event input review for sensitive fields (pre-rita gate)
+- Skill prompt display filtering: replace text-matching heuristic with explicit
+  message tagging in the orchestrator
+- `alert()` in `deleteInvestigation()` — replace with inline/toast error
+- `_chartRegistry` cleanup: cards are never removed from the DOM today
+  (sidebar uses `x-show`, not `x-if`); if cards become removable in a future
+  cycle, add registry cleanup in `_applyCompletedState` to avoid memory leaks
+
+---
+
 ## Phase 2b.2 — C5: header polish and source status indicators
 
 **Status**: closed 2026-04-30. Backend (ping + `/sources/status`), frontend (status dots + chart re-render), tests (3 unit tests for the endpoint), and empirical verification on Felip's Mac all complete.
@@ -235,10 +261,10 @@ to track live instances; add a `MutationObserver` on
 destroy and recreate every registered Chart instance with the current theme
 colors.
 
-**Known limitation**: `_chartRegistry` has no cleanup today because tool
-cards are never removed from the DOM in normal use. When C6 (Save & Publish
-with slide-in sidebar) is implemented, cards may become removable — review
-registry cleanup at that point to avoid memory leaks.
+**Known limitation**: `_chartRegistry` has no cleanup today. C6 was the
+anticipated review point, but the sidebar uses `x-show` (not `x-if`), so
+cards remain in the DOM and no cleanup was needed. Deferred to Phase 2c if
+cards ever become truly removable.
 
 ### β — Real source status indicators
 
