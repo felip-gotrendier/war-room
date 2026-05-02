@@ -217,6 +217,29 @@ async def landing(request: Request) -> HTMLResponse | RedirectResponse:
     )
 
 
+@router.get("/investigations/view", response_class=HTMLResponse, response_model=None)
+async def investigations_view(request: Request) -> HTMLResponse | RedirectResponse:
+    user = _get_user(request)
+    if user is None:
+        return RedirectResponse("/auth/login", status_code=302)
+
+    repo = request.app.state.repo
+    inv_repo = request.app.state.saved_inv_repo
+
+    conversations = repo.list_by_user(user.user_id)
+    investigations = inv_repo.list_all()
+
+    return templates.TemplateResponse(
+        request,
+        "investigations.html",
+        {
+            "user": user,
+            "investigations": investigations,
+            "conversations": conversations,
+        },
+    )
+
+
 @router.get("/conversations/{id}/view", response_class=HTMLResponse, response_model=None)
 async def conversation_view(
     id: str, request: Request
@@ -245,6 +268,7 @@ async def conversation_view(
             "ctx": ctx,
             "metadata": metadata,
             "conversations": conversations,
+            "current_conv_id": ctx.id,
             "published": published,
             "cap_reached": ctx.iteration_count >= 15,
             "display_messages": _display_messages(ctx.messages),

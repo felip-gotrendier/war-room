@@ -364,7 +364,7 @@ async def list_investigations(
             published_by_email=r["published_by_email"],
             published_at=r["published_at"],
             original_question=r["original_question"],
-            metrics_mentioned=json.loads(r["metrics_mentioned"]),
+            metrics_mentioned=r["metrics_mentioned"],
             final_confidence=r["final_confidence"],
         )
         for r in rows

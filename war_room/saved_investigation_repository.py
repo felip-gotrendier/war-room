@@ -96,7 +96,12 @@ class SavedInvestigationRepository:
                 ORDER BY published_at DESC
                 """
             ).fetchall()
-        return [dict(row) for row in rows]
+        result = []
+        for row in rows:
+            r = dict(row)
+            r["metrics_mentioned"] = json.loads(r["metrics_mentioned"] or "[]")
+            result.append(r)
+        return result
 
     def get(self, id: str) -> dict:
         with db_transaction(self._db_path) as conn:

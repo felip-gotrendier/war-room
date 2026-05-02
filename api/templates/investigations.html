@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}investigations — war room{% endblock %}
+
+{% block sidebar_items %}
+  {% include "_sidebar_items.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-full">
+
+  <!-- ── Page header ─────────────────────────────────────────── -->
+  <div class="flex-shrink-0 flex items-center px-6 py-3
+              border-b border-zinc-200 dark:border-zinc-800/70">
+    <h1 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+      Saved investigations
+    </h1>
+    <span class="ml-2 text-xs text-zinc-400 dark:text-zinc-600">
+      {{ investigations | length }}
+    </span>
+  </div>
+
+  <!-- ── Investigation list ──────────────────────────────────── -->
+  <div class="flex-1 overflow-y-auto">
+    {% if investigations %}
+    <ul class="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+      {% for inv in investigations %}
+      <li id="inv-{{ inv.id }}"
+          class="flex items-start gap-4 px-6 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-900/40 transition-colors">
+
+        <!-- Main info -->
+        <div class="flex-1 min-w-0">
+          <a href="/conversations/{{ inv.conversation_id }}/view"
+             class="text-sm font-medium text-zinc-800 hover:text-violet-600
+                    dark:text-zinc-100 dark:hover:text-violet-400 transition-colors truncate block">
+            {{ inv.title }}
+          </a>
+          <p class="text-xs mt-0.5 text-zinc-400 dark:text-zinc-600">
+            {{ inv.published_by_email }} · {{ inv.published_at[:10] }}
+          </p>
+          {% if inv.metrics_mentioned %}
+          <div class="flex flex-wrap gap-1 mt-2">
+            {% for metric in inv.metrics_mentioned %}
+            <span class="px-1.5 py-0.5 rounded text-xs font-mono
+                         bg-zinc-100 text-zinc-500
+                         dark:bg-zinc-800 dark:text-zinc-400">
+              {{ metric }}
+            </span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Delete button -->
+        <button onclick="deleteInvestigation('{{ inv.id }}')"
+                class="flex-shrink-0 mt-0.5 px-2.5 py-1 text-xs rounded transition-colors
+                       text-zinc-400 hover:text-red-500 hover:bg-red-50
+                       dark:text-zinc-600 dark:hover:text-red-400 dark:hover:bg-red-900/20">
+          delete
+        </button>
+
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="flex items-center justify-center h-full py-16">
+      <p class="text-sm text-zinc-400 dark:text-zinc-600">
+        No published investigations yet.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function deleteInvestigation(id) {
+    const row = document.getElementById(`inv-${id}`);
+    if (!row) return;
+    try {
+      const resp = await fetch(`/investigations/${id}`, { method: 'DELETE' });
+      if (resp.ok || resp.status === 204) {
+        row.remove();
+      } else {
+        // TODO (Phase 2c): replace with inline/toast error — alert() is
+        // visually inconsistent with the rest of the UI.
+        alert('Delete failed');
+      }
+    } catch {
+      alert('Connection error');
+    }
+  }
+</script>
+{% endblock %}

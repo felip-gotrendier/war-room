@@ -3,23 +3,7 @@
 {% block title %}war room{% endblock %}
 
 {% block sidebar_items %}
-  {% for conv in conversations %}
-  <a href="/conversations/{{ conv.id }}/view"
-     data-conv-id="{{ conv.id }}"
-     class="flex flex-col px-2.5 py-2 rounded text-left transition-colors
-            hover:bg-zinc-100 dark:hover:bg-zinc-800/60">
-    <span class="conv-title text-xs font-medium truncate text-zinc-700 dark:text-zinc-300">
-      {{ conv.title }}
-    </span>
-    <span class="text-xs mt-0.5 text-zinc-400 dark:text-zinc-600">
-      {{ conv.iteration_count }} iter · {{ conv.last_active_at[:10] }}
-    </span>
-  </a>
-  {% else %}
-  <p class="text-xs px-2.5 py-3 text-zinc-400 dark:text-zinc-700">
-    No investigations yet.
-  </p>
-  {% endfor %}
+  {% include "_sidebar_items.html" %}
 {% endblock %}
 
 {% block content %}
